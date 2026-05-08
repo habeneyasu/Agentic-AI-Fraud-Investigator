@@ -45,8 +45,8 @@ logs/
 # Docker
 *.override.yml
 
-# Kiro (keep specs, ignore generated artifacts)
-.kiro/settings/
+# Kiro specs and settings
+.kiro/
 
-# Docs lock files
-docs/.~lock.*
+# Docs
+docs/
