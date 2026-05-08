@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     cors_origins: List[str] = ["*"]
     
+    # Server Configuration
+    host: str = Field(default="0.0.0.0", env="HOST")
+    port: int = Field(default=8000, env="PORT")
+    
     # Celery Configuration
     celery_broker_url: str = Field(
         default="redis://localhost:6379/0",

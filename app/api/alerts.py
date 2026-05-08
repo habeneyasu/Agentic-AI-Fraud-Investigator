@@ -1,8 +1,9 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime
 from enum import Enum
 import asyncio
 
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.core.triage import get_fraud_triage, TriagePriority
@@ -178,3 +179,40 @@ async def create_alert_from_transaction(
             "evidence": [transaction_data]
         }
     )
+
+
+router = APIRouter()
+@router.post("/process", response_model=AlertResponse)
+async def process_alert(alert: AlertInput) -> AlertResponse:
+    """Process a fraud alert with intelligent triage."""
+    processor = get_fraud_alert_processor()
+    return await processor.process_alert(alert)
+
+
+@router.post("/batch", response_model=List[AlertResponse])
+async def process_batch_alerts(alerts: List[AlertInput]) -> List[AlertResponse]:
+    """Process multiple fraud alerts concurrently."""
+    processor = get_fraud_alert_processor()
+    return await processor.process_batch_alerts(alerts)
+
+
+@router.post("/from-transaction", response_model=AlertInput)
+async def create_alert_from_transaction_endpoint(
+    transaction_data: Dict[str, Any],
+    anomaly_score: float,
+    source_system: str = "transaction_monitoring"
+) -> AlertInput:
+    """Create a fraud alert from transaction data."""
+    return await create_alert_from_transaction(transaction_data, anomaly_score, source_system)
+
+
+@router.get("/types", response_model=List[str])
+async def get_alert_types() -> List[str]:
+    """Get available alert types."""
+    return [alert_type.value for alert_type in AlertType]
+
+
+@router.get("/statuses", response_model=List[str])
+async def get_alert_statuses() -> List[str]:
+    """Get available alert statuses."""
+    return [status.value for status in AlertStatus]
