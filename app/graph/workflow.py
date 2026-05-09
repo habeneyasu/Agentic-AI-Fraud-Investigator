@@ -1,6 +1,6 @@
 """LangGraph workflow definition with nodes, edges, and conditional routing."""
 
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Callable
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
@@ -8,8 +8,7 @@ import asyncio
 from asyncio import Semaphore
 import time
 
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor
+from langgraph.graph import StateGraph
 
 from app.core.logging import get_logger
 from app.graph.state import InvestigationState, InvestigationStatus
@@ -17,7 +16,6 @@ from app.agents.transaction import analyze_transaction
 from app.agents.kyc_device import analyze_kyc_event
 from app.agents.sanctions import analyze_sanctions_risk
 from app.graph.scoring import calculate_risk_score
-from app.services.fraud_memory import get_fraud_memory_service
 
 logger = get_logger(__name__)
 
@@ -154,7 +152,7 @@ class LangGraphWorkflow:
     def __init__(self):
         self.executor = WorkflowExecutor()
         self.graph = self._build_workflow_graph()
-        self.tool_executor = ToolExecutor()
+        self.compiled_graph = self.graph.compile()
         
     def _build_workflow_graph(self) -> StateGraph:
         """Build LangGraph with nodes and edges."""
@@ -200,7 +198,7 @@ class LangGraphWorkflow:
             NodeType.INVESTIGATION: WorkflowNode(
                 node_id="investigation",
                 node_type=NodeType.INVESTIGATION,
-                function=self._start_investigation,
+                function=self._start_detailed_investigation,
                 conditions={"high_risk": True}
             ),
             NodeType.ESCALATION: WorkflowNode(
@@ -217,9 +215,10 @@ class LangGraphWorkflow:
             )
         }
         
-        # Add nodes to graph
+        # Add nodes to graph with executor wrapper
         for node_id, node in nodes.items():
-            workflow.add_node(node_id, node.function)
+            wrapped_function = lambda state: self.executor.execute_node_with_semaphore(node, state)
+            workflow.add_node(node_id, wrapped_function)
         
         # Define edges with conditional routing
         edges = [
@@ -228,26 +227,28 @@ class LangGraphWorkflow:
             WorkflowEdge(NodeType.TRANSACTION_ANALYSIS, NodeType.KYC_ANALYSIS, EdgeType.SEQUENTIAL),
             WorkflowEdge(NodeType.KYC_ANALYSIS, NodeType.SANCTIONS_CHECK, EdgeType.SEQUENTIAL),
             WorkflowEdge(NodeType.SANCTIONS_CHECK, NodeType.RISK_SCORING, EdgeType.SEQUENTIAL),
+            WorkflowEdge(NodeType.RISK_SCORING, NodeType.DECISION, EdgeType.SEQUENTIAL),
             
             # Conditional edges from decision
-            WorkflowEdge(NodeType.DECISION, NodeType.INVESTIGATION, EdgeType.CONDITIONAL, "high_risk"),
-            WorkflowEdge(NodeType.DECISION, NodeType.RESOLUTION, EdgeType.CONDITIONAL, "low_risk"),
+            WorkflowEdge(NodeType.DECISION, NodeType.INVESTIGATION, EdgeType.CONDITIONAL, "risk_score > 0.7"),
+            WorkflowEdge(NodeType.DECISION, NodeType.RESOLUTION, EdgeType.CONDITIONAL, "risk_score <= 0.7"),
             
             # Conditional edges from investigation
-            WorkflowEdge(NodeType.INVESTIGATION, NodeType.ESCALATION, EdgeType.CONDITIONAL, "critical_risk"),
-            WorkflowEdge(NodeType.INVESTIGATION, NodeType.RESOLUTION, EdgeType.CONDITIONAL, "resolved"),
+            WorkflowEdge(NodeType.INVESTIGATION, NodeType.ESCALATION, EdgeType.CONDITIONAL, "risk_score > 0.8"),
+            WorkflowEdge(NodeType.INVESTIGATION, NodeType.RESOLUTION, EdgeType.CONDITIONAL, "risk_score <= 0.8"),
             
             # Conditional edges from escalation
-            WorkflowEdge(NodeType.ESCALATION, NodeType.RESOLUTION, EdgeType.CONDITIONAL, "resolved"),
+            WorkflowEdge(NodeType.ESCALATION, NodeType.RESOLUTION, EdgeType.CONDITIONAL, "status == resolved"),
         ]
         
         # Add edges to graph
         for edge in edges:
             if edge.edge_type == EdgeType.CONDITIONAL:
+                condition = edge.condition
                 workflow.add_conditional_edge(
                     edge.from_node,
                     edge.to_node,
-                    lambda state: self.executor._evaluate_condition(edge.condition, state)
+                    lambda state, condition=condition: self.executor._evaluate_condition(condition, state)
                 )
             else:
                 workflow.add_edge(edge.from_node, edge.to_node)
@@ -340,7 +341,7 @@ class LangGraphWorkflow:
         
         return {"decision": decision, "new_status": state.status.value}
     
-    async def _start_investigation(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _start_detailed_investigation(self, state: InvestigationState) -> Dict[str, Any]:
         """Start detailed investigation."""
         logger.info(f"Starting detailed investigation for case {state.case_id}")
         
@@ -370,11 +371,11 @@ class LangGraphWorkflow:
         return {"resolved": True, "resolution_notes": state.resolution_notes}
     
     async def execute_workflow(self, initial_state: InvestigationState) -> InvestigationState:
-        """Execute the complete fraud investigation workflow."""
+        """Execute complete fraud investigation workflow."""
         logger.info(f"Executing workflow for case {initial_state.case_id}")
         
         try:
-            result = await self.graph.ainvoke(initial_state)
+            result = await self.compiled_graph.ainvoke(initial_state)
             final_state = InvestigationState(**result)
             final_state.status = InvestigationStatus.COMPLETED
             return final_state

@@ -20,6 +20,10 @@ class InvestigationStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    IN_PROGRESS = "in_progress"
+    ESCALATED = "escalated"
+    LOW_PRIORITY = "low_priority"
+    RESOLVED = "resolved"
 
 
 class InvestigationState(BaseModel):
@@ -56,6 +60,20 @@ class InvestigationState(BaseModel):
     actions_taken: List[str] = Field(default_factory=list, description="Actions performed")
     pending_actions: List[str] = Field(default_factory=list, description="Pending actions")
     escalation_reason: Optional[str] = Field(None, description="Reason for escalation")
+    escalated_to: Optional[str] = Field(None, description="Escalation target")
+    resolution_notes: Optional[str] = Field(None, description="Resolution notes")
+    closed_at: Optional[datetime] = Field(None, description="Case closure time")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+    
+    # Workflow data
+    transaction_data: Optional[List[Dict[str, Any]]] = Field(None, description="Transaction data")
+    kyc_data: Optional[List[Dict[str, Any]]] = Field(None, description="KYC data")
+    entities: Optional[List[Dict[str, Any]]] = Field(None, description="Entity data")
+    customer_history: Optional[Dict[str, Any]] = Field(None, description="Customer history")
+    anomalies: List[Dict[str, Any]] = Field(default_factory=list, description="Detected anomalies")
+    kyc_anomalies: List[Dict[str, Any]] = Field(default_factory=list, description="KYC anomalies")
+    sanctions_hits: List[Dict[str, Any]] = Field(default_factory=list, description="Sanctions hits")
+    investigator_id: Optional[str] = Field(None, description="Investigator ID")
     
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow, description="State creation time")
