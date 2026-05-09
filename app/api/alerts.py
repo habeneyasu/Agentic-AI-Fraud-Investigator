@@ -11,6 +11,8 @@ from app.core.schemas import CaseInput, HistoricalContext, TriageResult, TriageC
 from app.core.logging import get_logger
 from app.core.langsmith import track_langsmith
 from app.llm.client import LLMProvider
+from app.graph.workflow import execute_fraud_workflow
+from app.graph.state import InvestigationState
 
 logger = get_logger(__name__)
 
@@ -49,10 +51,13 @@ class AlertInput(BaseModel):
 class AlertResponse(BaseModel):
     """Response model for alert processing."""
     alert_id: str = Field(..., description="Alert identifier")
-    status: AlertStatus = Field(..., description="Processing status")
+    status: str = Field(..., description="Processing status")
+    case_id: Optional[str] = Field(None, description="Generated case identifier")
+    risk_score: Optional[float] = Field(None, description="Calculated risk score")
     triage_result: Optional[TriageResult] = Field(None, description="Triage analysis result")
-    processing_time_ms: float = Field(..., description="Processing time in milliseconds")
-    error_message: Optional[str] = Field(None, description="Error message if failed")
+    investigation_status: Optional[str] = Field(None, description="Investigation workflow status")
+    timestamp: str = Field(..., description="Response timestamp")
+    error_message: Optional[str] = Field(None, description="Error message if processing failed")
 
 
 class FraudAlertProcessor:
@@ -187,6 +192,53 @@ async def process_alert(alert: AlertInput) -> AlertResponse:
     """Process a fraud alert with intelligent triage."""
     processor = get_fraud_alert_processor()
     return await processor.process_alert(alert)
+
+
+@router.post("/trigger-workflow", response_model=AlertResponse)
+async def trigger_workflow(alert: AlertInput) -> AlertResponse:
+    """Trigger LangGraph workflow for fraud investigation."""
+    try:
+        # Convert alert to investigation state
+        investigation_state = InvestigationState(
+            case_id=alert.alert_id,
+            case_type=alert.alert_type,
+            title=f"Fraud Alert: {alert.alert_type}",
+            description=alert.case_data.get("description", f"Alert of type {alert.alert_type}"),
+            priority=TriagePriority.HIGH,
+            metadata=alert.case_data,
+            transaction_data=alert.case_data.get("transactions", []),
+            kyc_data=alert.case_data.get("kyc_events", []),
+            entities=alert.case_data.get("entities", []),
+            customer_history=alert.historical_context or {}
+        )
+        
+        # Execute workflow asynchronously
+        final_state = await execute_fraud_workflow(investigation_state)
+        
+        return AlertResponse(
+            alert_id=alert.alert_id,
+            status="workflow_triggered",
+            case_id=final_state.case_id,
+            risk_score=final_state.risk_score or 0.0,
+            triage_result=TriageResult(
+                category=TriageCategory.HIGH_RISK,
+                priority=TriagePriority.HIGH,
+                requires_investigation=True,
+                urgency_indicators=["Automated workflow triggered"],
+                recommended_action="Full investigation via LangGraph"
+            ).dict(),
+            investigation_status=final_state.status.value,
+            timestamp=datetime.utcnow().isoformat()
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to trigger workflow for alert {alert.alert_id}: {e}")
+        return AlertResponse(
+            alert_id=alert.alert_id,
+            status="error",
+            error_message=str(e),
+            timestamp=datetime.utcnow().isoformat()
+        )
 
 
 @router.post("/batch", response_model=List[AlertResponse])
