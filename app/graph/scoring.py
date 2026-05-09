@@ -1,6 +1,6 @@
 """Mock risk scoring system with random and rule-based options."""
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
@@ -61,35 +61,22 @@ class MockRiskScorer:
         """Load scoring rules."""
         return {
             'transaction': {
-                'high_amount_threshold': 10000,
-                'new_device_penalty': 0.2,
-                'off_hours_penalty': 0.15
+                'high_amount_threshold': 10000
             },
             'device': {
-                'new_device_penalty': 0.3,
-                'suspicious_fingerprint_penalty': 0.4,
-                'proxy_penalty': 0.25,
-                'vpn_penalty': 0.2
+                'new_device_penalty': 0.3
             },
             'geo': {
-                'high_risk_country_penalty': 0.5,
-                'impossible_travel_penalty': 0.6,
-                'location_change_penalty': 0.1
+                'high_risk_country_penalty': 0.5
             },
             'sanctions': {
-                'sanctioned_entity_penalty': 0.8,
-                'high_risk_country_penalty': 0.4,
-                'watchlist_keyword_penalty': 0.3
+                'sanctioned_entity_penalty': 0.8
             },
             'behavior': {
-                'failed_login_penalty': 0.2,
-                'unusual_time_penalty': 0.15,
-                'rapid_succession_penalty': 0.1
+                'failed_login_penalty': 0.2
             },
             'identity': {
-                'synthetic_identity_penalty': 0.7,
-                'new_customer_penalty': 0.2,
-                'age_risk_factor': 0.1
+                'synthetic_identity_penalty': 0.7
             }
         }
     
@@ -109,9 +96,9 @@ class MockRiskScorer:
         event_type = event.get('event_type', 'unknown')
         
         if event_type == 'transaction':
-            base_score = min(random.uniform(0.0, 1.0) + random.uniform(-0.1, 0.3), 1.0)
+            base_score = max(0.0, min(random.uniform(0.0, 1.0) + random.uniform(-0.1, 0.3), 1.0))
         elif event_type == 'login':
-            base_score = min(random.uniform(0.0, 1.0) + random.uniform(-0.2, 0.2), 1.0)
+            base_score = max(0.0, min(random.uniform(0.0, 1.0) + random.uniform(-0.2, 0.2), 1.0))
         else:
             base_score = random.uniform(0.0, 1.0)
         
@@ -177,21 +164,23 @@ class MockRiskScorer:
         # Behavior rules
         failed_attempts = event.get('failed_attempts', 0)
         if failed_attempts > 3:
-            score += self.rules['behavior']['failed_login_penalty'] * min(failed_attempts / 3, 2)
+            actual_contribution = self.rules['behavior']['failed_login_penalty'] * min(failed_attempts / 3, 2)
+            score += actual_contribution
             factors.append(RiskFactor(
                 category=RiskCategory.BEHAVIOR,
                 factor="failed_attempts",
-                weight=self.rules['behavior']['failed_login_penalty'],
+                weight=actual_contribution,
                 value=failed_attempts,
                 description=f"Multiple failed attempts: {failed_attempts}"
             ))
         
+        capped_score = min(score, 1.0)
         return ScoringResult(
-            risk_score=min(score, 1.0),
-            risk_level=self._get_risk_level(score),
+            risk_score=capped_score,
+            risk_level=self._get_risk_level(capped_score),
             confidence=0.8,
             factors=factors,
-            explanation=f"Rules-based scoring calculated score {score:.3f}",
+            explanation=f"Rules-based scoring calculated score {capped_score:.3f}",
             scoring_mode=ScoringMode.RULES_ONLY,
             timestamp=datetime.utcnow()
         )
@@ -200,7 +189,7 @@ class MockRiskScorer:
         """Calculate risk score using hybrid approach."""
         rules_result = await self._rules_based_scoring(event)
         random_factor = random.uniform(-0.1, 0.1)
-        hybrid_score = min(rules_result.risk_score + random_factor, 1.0)
+        hybrid_score = max(0.0, min(rules_result.risk_score + random_factor, 1.0))
         
         # Blend factors
         hybrid_factors = rules_result.factors.copy()
@@ -282,8 +271,7 @@ def get_mock_scorer(mode: ScoringMode = ScoringMode.RANDOM) -> MockRiskScorer:
 async def calculate_risk_score(event: Dict[str, Any], 
                            mode: ScoringMode = ScoringMode.RANDOM) -> ScoringResult:
     """Calculate risk score using mock scorer."""
-    scorer = get_mock_scorer(mode)
-    return await scorer.calculate_risk_score(event)
+    return await mock_scorer.calculate_risk_score(event)
 
 
 def update_scoring_mode(mode: ScoringMode) -> None:
