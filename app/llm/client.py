@@ -1,14 +1,14 @@
 from typing import Optional, Dict, Any, List
 from enum import Enum
-import openai
-import google.generativeai as genai
-from anthropic import Anthropic
+import asyncio
+import time
+import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from google.generativeai import GenerativeModel, configure as genai_configure
 from cerebras.cloud.sdk import Cerebras
 from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.schema import HumanMessage, AIMessage, SystemMessage
+from langchain.schema import HumanMessage, SystemMessage
 from langchain.callbacks.base import BaseCallbackHandler
-import time
 
 from app.core.config import LLMConfig
 from app.core.langsmith import track_langsmith, get_langsmith_manager
@@ -20,7 +20,6 @@ logger = get_logger(__name__)
 class LLMProvider(Enum):
     """Supported LLM providers."""
     OPENAI = "openai"
-    ANTHROPIC = "anthropic"
     CEREBRAS = "cerebras"
     GEMINI = "gemini"
 
@@ -33,7 +32,6 @@ class LangSmithCallbackHandler(BaseCallbackHandler):
         self.run_id = None
         
     def on_chain_start(self, serialized, inputs, **kwargs):
-        """Handle chain start."""
         self.run_id = self.langsmith_manager.create_run(
             name=serialized.get("name", "unknown_chain"),
             inputs=inputs,
@@ -41,319 +39,201 @@ class LangSmithCallbackHandler(BaseCallbackHandler):
         )
         
     def on_chain_end(self, outputs, **kwargs):
-        """Handle chain end."""
         if self.run_id:
             self.langsmith_manager.end_run(self.run_id, outputs=outputs)
             
     def on_chain_error(self, error, **kwargs):
-        """Handle chain error."""
         if self.run_id:
             self.langsmith_manager.end_run(self.run_id, error=str(error))
 
 
 class LLMClient:
-    """Unified LLM client supporting multiple providers with LangSmith observability."""
+    """Unified LLM client with async support, timeouts, and retries."""
     
-    def __init__(self, provider: LLMProvider = LLMProvider.OPENAI):
+    def __init__(self, provider: LLMProvider = LLMProvider.CEREBRAS):
         self.provider = provider
         self.langsmith_manager = get_langsmith_manager()
         self.callback_handler = LangSmithCallbackHandler()
-        
-        if provider == LLMProvider.OPENAI:
-            self._init_openai()
-        elif provider == LLMProvider.ANTHROPIC:
-            self._init_anthropic()
-        elif provider == LLMProvider.CEREBRAS:
-            self._init_cerebras()
-        elif provider == LLMProvider.GEMINI:
-            self._init_gemini()
+        self._init_client()
     
-    def _init_openai(self) -> None:
-        """Initialize OpenAI client."""
-        if not LLMConfig.openai_api_key:
-            raise ValueError("OpenAI API key not configured")
-            
-        openai.api_key = LLMConfig.openai_api_key
-        self.client = ChatOpenAI(
-            model=LLMConfig.openai_model,
-            temperature=LLMConfig.temperature,
-            max_tokens=LLMConfig.max_tokens,
-            callbacks=[self.callback_handler] if self.langsmith_manager.enabled else None
+    def _init_client(self):
+        """Initialize the appropriate client based on provider."""
+        if self.provider == LLMProvider.OPENAI:
+            if not LLMConfig.openai_api_key:
+                raise ValueError("OpenAI API key not configured")
+            self.client = ChatOpenAI(
+                model=LLMConfig.openai_model,
+                temperature=LLMConfig.temperature,
+                max_tokens=LLMConfig.max_tokens,
+                callbacks=[self.callback_handler] if self.langsmith_manager.enabled else None
+            )
+        elif self.provider == LLMProvider.CEREBRAS:
+            if not LLMConfig.cerebras_api_key:
+                raise ValueError("Cerebras API key not configured")
+            self.client = Cerebras(api_key=LLMConfig.cerebras_api_key)
+        elif self.provider == LLMProvider.GEMINI:
+            if not LLMConfig.gemini_api_key:
+                raise ValueError("Gemini API key not configured")
+            genai_configure(api_key=LLMConfig.gemini_api_key)
+    
+    def _log_result(self, provider: str, task_type: str, duration: float, model: str):
+        """Log performance metrics."""
+        logger.info(
+            "LLM call completed",
+            provider=provider,
+            task_type=task_type,
+            duration_ms=duration * 1000
         )
     
-    def _init_anthropic(self) -> None:
-        """Initialize Anthropic client."""
-        if not LLMConfig.anthropic_api_key:
-            raise ValueError("Anthropic API key not configured")
-            
-        self.client = Anthropic(api_key=LLMConfig.anthropic_api_key)
+    def _build_result(self, provider: str, model: str, response: str, 
+                     duration: float, task_type: str) -> Dict[str, Any]:
+        """Build standardized result dictionary."""
+        return {
+            "provider": provider,
+            "model": model,
+            "response": response,
+            "duration_ms": duration * 1000,
+            "task_type": task_type
+        }
     
-    def _init_cerebras(self) -> None:
-        """Initialize Cerebras client."""
-        if not LLMConfig.cerebras_api_key:
-            raise ValueError("Cerebras API key not configured")
-            
-        self.client = Cerebras(api_key=LLMConfig.cerebras_api_key)
-    
-    def _init_gemini(self) -> None:
-        """Initialize Gemini client."""
-        if not LLMConfig.gemini_api_key:
-            raise ValueError("Gemini API key not configured")
-            
-        genai.configure(api_key=LLMConfig.gemini_api_key)
-        self.client = ChatGoogleGenerativeAI(
-            model=LLMConfig.gemini_model,
-            temperature=LLMConfig.temperature,
-            max_tokens=LLMConfig.max_tokens,
-            callbacks=[self.callback_handler] if self.langsmith_manager.enabled else None
-        )
-    
-    @track_langsmith(
-        name="fraud_analysis",
-        run_type="chain",
-        tags=["fraud", "investigation"],
-        metadata={"task": "fraud_analysis"}
-    )
-    def analyze_transaction(
-        self,
-        transaction_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    @track_langsmith(name="fraud_analysis", run_type="chain", 
+                    tags=["fraud", "investigation"], metadata={"task": "fraud_analysis"})
+    async def analyze_transaction(self, transaction_data: Dict[str, Any], 
+                               context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Analyze transaction for fraud indicators."""
-        
         prompt = self._build_fraud_analysis_prompt(transaction_data, context)
-        
-        if self.provider == LLMProvider.OPENAI:
-            return self._call_openai(prompt, "fraud_analysis")
-        elif self.provider == LLMProvider.ANTHROPIC:
-            return self._call_anthropic(prompt, "fraud_analysis")
-        elif self.provider == LLMProvider.CEREBRAS:
-            return self._call_cerebras(prompt, "fraud_analysis")
-        elif self.provider == LLMProvider.GEMINI:
-            return self._call_gemini(prompt, "fraud_analysis")
+        return await self._call_llm(prompt, "fraud_analysis")
     
-    @track_langsmith(
-        name="risk_assessment",
-        run_type="chain",
-        tags=["risk", "assessment"],
-        metadata={"task": "risk_assessment"}
-    )
-    def assess_risk(
-        self,
-        entity_data: Dict[str, Any],
-        historical_data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    @track_langsmith(name="risk_assessment", run_type="chain", 
+                    tags=["risk", "assessment"], metadata={"task": "risk_assessment"})
+    async def assess_risk(self, entity_data: Dict[str, Any], 
+                         historical_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Assess risk level for an entity."""
-        
         prompt = self._build_risk_assessment_prompt(entity_data, historical_data)
-        
-        if self.provider == LLMProvider.OPENAI:
-            return self._call_openai(prompt, "risk_assessment")
-        elif self.provider == LLMProvider.ANTHROPIC:
-            return self._call_anthropic(prompt, "risk_assessment")
-        elif self.provider == LLMProvider.CEREBRAS:
-            return self._call_cerebras(prompt, "risk_assessment")
-        elif self.provider == LLMProvider.GEMINI:
-            return self._call_gemini(prompt, "risk_assessment")
+        return await self._call_llm(prompt, "risk_assessment")
     
-    @track_langsmith(
-        name="investigation_recommendation",
-        run_type="chain",
-        tags=["investigation", "recommendation"],
-        metadata={"task": "investigation_recommendation"}
-    )
-    def generate_investigation_recommendation(
-        self,
-        case_data: Dict[str, Any],
-        evidence: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    @track_langsmith(name="investigation_recommendation", run_type="chain", 
+                    tags=["investigation", "recommendation"], 
+                    metadata={"task": "investigation_recommendation"})
+    async def generate_investigation_recommendation(self, case_data: Dict[str, Any], 
+                                                 evidence: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Generate investigation recommendations."""
-        
         prompt = self._build_investigation_prompt(case_data, evidence)
-        
+        return await self._call_llm(prompt, "investigation_recommendation")
+    
+    async def _call_llm(self, prompt: str, task_type: str) -> Dict[str, Any]:
+        """Unified LLM call method."""
         if self.provider == LLMProvider.OPENAI:
-            return self._call_openai(prompt, "investigation_recommendation")
-        elif self.provider == LLMProvider.ANTHROPIC:
-            return self._call_anthropic(prompt, "investigation_recommendation")
+            return self._call_openai(prompt, task_type)
         elif self.provider == LLMProvider.CEREBRAS:
-            return self._call_cerebras(prompt, "investigation_recommendation")
+            return await self._call_cerebras_async(prompt, task_type)
         elif self.provider == LLMProvider.GEMINI:
-            return self._call_gemini(prompt, "investigation_recommendation")
+            return await self._call_gemini_async(prompt, task_type)
     
     def _call_openai(self, prompt: str, task_type: str) -> Dict[str, Any]:
-        """Call OpenAI API with LangSmith tracking."""
+        """Call OpenAI API."""
         try:
             start_time = time.time()
-            
             messages = [
                 SystemMessage(content="You are a fraud investigation expert."),
                 HumanMessage(content=prompt)
             ]
-            
             response = self.client.invoke(messages)
             duration = time.time() - start_time
             
-            result = {
-                "provider": "openai",
-                "model": LLMConfig.openai_model,
-                "response": response.content,
-                "duration_ms": duration * 1000,
-                "task_type": task_type
-            }
-            
-            # Log performance metrics
-            logger.info(
-                "LLM call completed",
-                provider="openai",
-                task_type=task_type,
-                duration_ms=duration * 1000
-            )
-            
+            result = self._build_result("openai", LLMConfig.openai_model, 
+                                      response.content, duration, task_type)
+            self._log_result("openai", task_type, duration, LLMConfig.openai_model)
             return result
             
         except Exception as e:
             logger.error("OpenAI API call failed", error=str(e), task_type=task_type)
             raise
     
-    def _call_anthropic(self, prompt: str, task_type: str) -> Dict[str, Any]:
-        """Call Anthropic API with LangSmith tracking."""
-        try:
-            start_time = time.time()
-            
-            response = self.client.messages.create(
-                model=LLMConfig.anthropic_model,
-                max_tokens=LLMConfig.max_tokens,
-                temperature=LLMConfig.temperature,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
-            duration = time.time() - start_time
-            
-            result = {
-                "provider": "anthropic",
-                "model": LLMConfig.anthropic_model,
-                "response": response.content[0].text,
-                "duration_ms": duration * 1000,
-                "task_type": task_type
-            }
-            
-            # Log performance metrics
-            logger.info(
-                "LLM call completed",
-                provider="anthropic",
-                task_type=task_type,
-                duration_ms=duration * 1000
-            )
-            
-            return result
-            
-        except Exception as e:
-            logger.error("Anthropic API call failed", error=str(e), task_type=task_type)
-            raise
-    
-    def _call_cerebras(self, prompt: str, task_type: str) -> Dict[str, Any]:
-        """Call Cerebras API with LangSmith tracking."""
-        try:
-            start_time = time.time()
-            
-            response = self.client.chat.completions.create(
-                model=LLMConfig.cerebras_model,
-                messages=[
-                    {"role": "system", "content": "You are a fraud investigation expert."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=LLMConfig.temperature,
-                max_tokens=LLMConfig.max_tokens
-            )
-            
-            duration = time.time() - start_time
-            
-            result = {
-                "provider": "cerebras",
-                "model": LLMConfig.cerebras_model,
-                "response": response.choices[0].message.content,
-                "duration_ms": duration * 1000,
-                "task_type": task_type
-            }
-            
-            # Log performance metrics
-            logger.info(
-                "LLM call completed",
-                provider="cerebras",
-                task_type=task_type,
-                duration_ms=duration * 1000
-            )
-            
-            return result
-            
-        except Exception as e:
-            logger.error("Cerebras API call failed", error=str(e), task_type=task_type)
-            raise
-    
-    def _call_gemini(self, prompt: str, task_type: str) -> Dict[str, Any]:
-        """Call Gemini API with LangSmith tracking."""
-        try:
-            start_time = time.time()
-            
-            messages = [
-                SystemMessage(content="You are a fraud investigation expert."),
-                HumanMessage(content=prompt)
-            ]
-            
-            response = self.client.invoke(messages)
-            duration = time.time() - start_time
-            
-            result = {
-                "provider": "gemini",
-                "model": LLMConfig.gemini_model,
-                "response": response.content,
-                "duration_ms": duration * 1000,
-                "task_type": task_type
-            }
-            
-            # Log performance metrics
-            logger.info(
-                "LLM call completed",
-                provider="gemini",
-                task_type=task_type,
-                duration_ms=duration * 1000
-            )
-            
-            return result
-            
-        except Exception as e:
-            logger.error("Gemini API call failed", error=str(e), task_type=task_type)
-            raise
-    
-    def _build_fraud_analysis_prompt(
-        self,
-        transaction_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """Build prompt for fraud analysis."""
+    @retry(stop=stop_after_attempt(3), 
+           wait=wait_exponential(multiplier=1, min=4, max=10),
+           retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException)))
+    async def _call_cerebras_async(self, prompt: str, task_type: str, 
+                                 timeout: float = 30.0) -> Dict[str, Any]:
+        """Call Cerebras API asynchronously with timeout and retry."""
+        start_time = time.time()
         
-        base_prompt = """
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                "https://api.cerebras.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {LLMConfig.cerebras_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": LLMConfig.cerebras_model,
+                    "messages": [
+                        {"role": "system", "content": "You are a fraud investigation expert."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": LLMConfig.temperature,
+                    "max_tokens": LLMConfig.max_tokens
+                }
+            )
+            response.raise_for_status()
+            result_data = response.json()
+            
+        duration = time.time() - start_time
+        response_text = result_data["choices"][0]["message"]["content"]
+        
+        result = self._build_result("cerebras", LLMConfig.cerebras_model, 
+                                  response_text, duration, task_type)
+        self._log_result("cerebras", task_type, duration, LLMConfig.cerebras_model)
+        return result
+    
+    @retry(stop=stop_after_attempt(3), 
+           wait=wait_exponential(multiplier=1, min=4, max=10),
+           retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException)))
+    async def _call_gemini_async(self, prompt: str, task_type: str, 
+                               timeout: float = 30.0) -> Dict[str, Any]:
+        """Call Gemini API asynchronously with timeout and retry."""
+        start_time = time.time()
+        
+        model = GenerativeModel(
+            model_name=LLMConfig.gemini_model,
+            generation_config={
+                "temperature": LLMConfig.temperature,
+                "max_output_tokens": LLMConfig.max_tokens,
+            }
+        )
+        
+        full_prompt = f"You are a fraud investigation expert.\n\n{prompt}"
+        response = await model.generate_content_async(full_prompt)
+        
+        duration = time.time() - start_time
+        
+        result = self._build_result("gemini", LLMConfig.gemini_model, 
+                                  response.text, duration, task_type)
+        self._log_result("gemini", task_type, duration, LLMConfig.gemini_model)
+        return result
+    
+    def _build_fraud_analysis_prompt(self, transaction_data: Dict[str, Any], 
+                                   context: Optional[Dict[str, Any]] = None) -> str:
+        """Build prompt for fraud analysis."""
+        base_prompt = f"""
         Analyze the following transaction for potential fraud indicators:
         
         Transaction Details:
-        - Amount: {amount}
-        - Currency: {currency}
-        - Timestamp: {timestamp}
-        - Sender: {sender}
-        - Receiver: {receiver}
-        - Location: {location}
-        - Device: {device}
+        - Amount: {transaction_data.get("amount", "N/A")}
+        - Currency: {transaction_data.get("currency", "N/A")}
+        - Timestamp: {transaction_data.get("timestamp", "N/A")}
+        - Sender: {transaction_data.get("sender", "N/A")}
+        - Receiver: {transaction_data.get("receiver", "N/A")}
+        - Location: {transaction_data.get("location", "N/A")}
+        - Device: {transaction_data.get("device", "N/A")}
         """
         
         if context:
             base_prompt += f"""
-            
             Context:
-            - Customer History: {customer_history}
-            - Risk Score: {risk_score}
-            - Previous Alerts: {previous_alerts}
+            - Customer History: {context.get("customer_history", "N/A")}
+            - Risk Score: {context.get("risk_score", "N/A")}
+            - Previous Alerts: {context.get("previous_alerts", "N/A")}
             """
         
         base_prompt += """
@@ -367,45 +247,29 @@ class LLMClient:
         Format your response as JSON.
         """
         
-        return base_prompt.format(
-            amount=transaction_data.get("amount", "N/A"),
-            currency=transaction_data.get("currency", "N/A"),
-            timestamp=transaction_data.get("timestamp", "N/A"),
-            sender=transaction_data.get("sender", "N/A"),
-            receiver=transaction_data.get("receiver", "N/A"),
-            location=transaction_data.get("location", "N/A"),
-            device=transaction_data.get("device", "N/A"),
-            customer_history=context.get("customer_history", "N/A") if context else "N/A",
-            risk_score=context.get("risk_score", "N/A") if context else "N/A",
-            previous_alerts=context.get("previous_alerts", "N/A") if context else "N/A"
-        )
+        return base_prompt
     
-    def _build_risk_assessment_prompt(
-        self,
-        entity_data: Dict[str, Any],
-        historical_data: Optional[Dict[str, Any]] = None
-    ) -> str:
+    def _build_risk_assessment_prompt(self, entity_data: Dict[str, Any], 
+                                    historical_data: Optional[Dict[str, Any]] = None) -> str:
         """Build prompt for risk assessment."""
-        
-        base_prompt = """
+        base_prompt = f"""
         Assess the risk level for the following entity:
         
         Entity Information:
-        - Name: {name}
-        - Type: {entity_type}
-        - Registration Date: {registration_date}
-        - Location: {location}
-        - Business Type: {business_type}
+        - Name: {entity_data.get("name", "N/A")}
+        - Type: {entity_data.get("type", "N/A")}
+        - Registration Date: {entity_data.get("registration_date", "N/A")}
+        - Location: {entity_data.get("location", "N/A")}
+        - Business Type: {entity_data.get("business_type", "N/A")}
         """
         
         if historical_data:
             base_prompt += f"""
-            
             Historical Data:
-            - Transaction Volume: {transaction_volume}
-            - Average Transaction Amount: {avg_amount}
-            - Previous Incidents: {incidents}
-            - Risk History: {risk_history}
+            - Transaction Volume: {historical_data.get("transaction_volume", "N/A")}
+            - Average Transaction Amount: {historical_data.get("avg_amount", "N/A")}
+            - Previous Incidents: {historical_data.get("incidents", "N/A")}
+            - Risk History: {historical_data.get("risk_history", "N/A")}
             """
         
         base_prompt += """
@@ -419,31 +283,17 @@ class LLMClient:
         Format your response as JSON.
         """
         
-        return base_prompt.format(
-            name=entity_data.get("name", "N/A"),
-            entity_type=entity_data.get("type", "N/A"),
-            registration_date=entity_data.get("registration_date", "N/A"),
-            location=entity_data.get("location", "N/A"),
-            business_type=entity_data.get("business_type", "N/A"),
-            transaction_volume=historical_data.get("transaction_volume", "N/A") if historical_data else "N/A",
-            avg_amount=historical_data.get("avg_amount", "N/A") if historical_data else "N/A",
-            incidents=historical_data.get("incidents", "N/A") if historical_data else "N/A",
-            risk_history=historical_data.get("risk_history", "N/A") if historical_data else "N/A"
-        )
+        return base_prompt
     
-    def _build_investigation_prompt(
-        self,
-        case_data: Dict[str, Any],
-        evidence: List[Dict[str, Any]]
-    ) -> str:
+    def _build_investigation_prompt(self, case_data: Dict[str, Any], 
+                                  evidence: List[Dict[str, Any]]) -> str:
         """Build prompt for investigation recommendations."""
-        
         evidence_text = "\n".join([
             f"- {e.get('type', 'Unknown')}: {e.get('description', 'No description')}"
             for e in evidence
         ])
         
-        prompt = f"""
+        return f"""
         Generate investigation recommendations for the following case:
         
         Case Information:
@@ -464,12 +314,9 @@ class LLMClient:
         
         Format your response as JSON.
         """
-        
-        return prompt
 
 
-# Factory function for creating LLM clients
-def create_llm_client(provider: LLMProvider = LLMProvider.OPENAI) -> LLMClient:
+def create_llm_client(provider: LLMProvider = LLMProvider.CEREBRAS) -> LLMClient:
     """Create an LLM client with the specified provider."""
     return LLMClient(provider)
 
