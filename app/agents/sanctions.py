@@ -2,62 +2,12 @@
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from dataclasses import dataclass
-from enum import Enum
 
 from app.core.logging import get_logger
+from app.shared.enums import RiskLevel, SanctionType
+from app.shared.models import CountryRisk, SanctionsEntry, SanctionsAlert
 
 logger = get_logger(__name__)
-
-
-class RiskLevel(str, Enum):
-    """Country risk levels."""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
-class SanctionType(str, Enum):
-    """Types of sanctions."""
-    COUNTRY_SANCTION = "country_sanction"
-    ENTITY_SANCTION = "entity_sanction"
-    INDIVIDUAL_SANCTION = "individual_sanction"
-    TRADE_RESTRICTION = "trade_restriction"
-    FINANCIAL_SANCTION = "financial_sanction"
-
-
-@dataclass
-class CountryRisk:
-    """Country risk assessment."""
-    country_code: str
-    country_name: str
-    risk_level: RiskLevel
-    risk_score: float
-    sanctions_active: bool
-    last_updated: datetime
-
-
-@dataclass
-class SanctionsEntry:
-    """Sanctions list entry."""
-    entity_id: str
-    entity_name: str
-    entity_type: str
-    sanction_type: SanctionType
-    country: str
-    confidence: float
-    last_seen: datetime
-
-
-@dataclass
-class SanctionsAlert:
-    """Sanctions detection alert."""
-    alert_type: SanctionType
-    severity: str
-    confidence: float
-    description: str
-    metadata: Dict[str, Any]
 
 
 class SanctionsDatabase:

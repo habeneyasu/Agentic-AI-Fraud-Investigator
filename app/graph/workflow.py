@@ -1,9 +1,7 @@
-"""LangGraph workflow definition with nodes, edges, and conditional routing."""
+"""LangGraph workflow definition - Clean Architecture Implementation."""
 
 from typing import Dict, Any, List, Callable
 from datetime import datetime
-from dataclasses import dataclass
-from enum import Enum
 import asyncio
 from asyncio import Semaphore
 import time
@@ -11,57 +9,11 @@ import time
 from langgraph.graph import StateGraph
 
 from app.core.logging import get_logger
-from app.graph.state import InvestigationState, InvestigationStatus
-from app.agents.transaction import analyze_transaction
-from app.agents.kyc_device import analyze_kyc_event
-from app.agents.sanctions import analyze_sanctions_risk
+from app.shared.enums import InvestigationStatus, NodeType, EdgeType
+from app.shared.models import InvestigationState, WorkflowNode, WorkflowEdge
 from app.graph.scoring import calculate_risk_score
 
 logger = get_logger(__name__)
-
-
-class NodeType(str, Enum):
-    """LangGraph node types."""
-    START = "start"
-    TRANSACTION_ANALYSIS = "transaction_analysis"
-    KYC_ANALYSIS = "kyc_analysis"
-    SANCTIONS_CHECK = "sanctions_check"
-    RISK_SCORING = "risk_scoring"
-    DECISION = "decision"
-    INVESTIGATION = "investigation"
-    ESCALATION = "escalation"
-    RESOLUTION = "resolution"
-    END = "end"
-
-
-class EdgeType(str, Enum):
-    """LangGraph edge types."""
-    CONDITIONAL = "conditional"
-    SEQUENTIAL = "sequential"
-    PARALLEL = "parallel"
-    RETRY = "retry"
-
-
-@dataclass
-class WorkflowNode:
-    """Workflow node definition."""
-    node_id: str
-    node_type: NodeType
-    function: Optional[Callable]
-    conditions: Optional[Dict[str, Any]]
-    max_retries: int = 3
-    timeout: float = 30.0
-    semaphore_key: Optional[str] = None
-
-
-@dataclass
-class WorkflowEdge:
-    """Workflow edge definition."""
-    from_node: str
-    to_node: str
-    edge_type: EdgeType
-    condition: Optional[str] = None
-    weight: float = 1.0
 
 
 class WorkflowExecutor:

@@ -1,41 +1,13 @@
-"""Action engine for fraud investigation resolution actions."""
+"""Action engine for fraud investigation resolution actions - Clean Architecture Implementation."""
 
 from typing import Dict, Any, List, Optional
-from enum import Enum
-from dataclasses import dataclass
 import logging
 from datetime import datetime
 
+from app.shared.enums import ActionType
+from app.shared.models import ActionRequest, ActionResult
+
 logger = logging.getLogger(__name__)
-
-
-class ActionType(str, Enum):
-    """Available fraud resolution actions."""
-    FREEZE = "freeze"
-    REVERSE = "reverse"
-    BLOCK = "block"
-    SMS = "sms"
-
-
-@dataclass
-class ActionRequest:
-    """Request for fraud resolution action."""
-    action_type: ActionType
-    case_id: str
-    reason: str
-    target_id: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class ActionResult:
-    """Result of action execution."""
-    success: bool
-    message: str
-    action_id: str
-    case_id: str
-    timestamp: datetime
-    details: Optional[Dict[str, Any]] = None
 
 
 class ActionEngine:

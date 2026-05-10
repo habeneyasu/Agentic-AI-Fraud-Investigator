@@ -2,49 +2,13 @@
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-from dataclasses import dataclass
-from enum import Enum
 from collections import defaultdict
 
 from app.core.logging import get_logger
+from app.shared.enums import FraudPattern
+from app.shared.models import TransactionVelocity, FraudMemory
 
 logger = get_logger(__name__)
-
-
-class FraudPattern(str, Enum):
-    """Fraud pattern types."""
-    VELOCITY_ANOMALY = "velocity_anomaly"
-    FREQUENCY_SPIKE = "frequency_spike"
-    AMOUNT_ANOMALY = "amount_anomaly"
-    LOCATION_ANOMALY = "location_anomaly"
-    DEVICE_ANOMALY = "device_anomaly"
-    KNOWN_FRAUDSTER = "known_fraudster"
-    SYNTHETIC_IDENTITY = "synthetic_identity"
-
-
-@dataclass
-class TransactionVelocity:
-    """Transaction velocity metrics."""
-    transaction_count: int
-    total_amount: float
-    average_amount: float
-    max_amount: float
-    min_amount: float
-    time_window_hours: int
-    unique_merchants: int
-    unique_locations: int
-    unique_devices: int
-
-
-@dataclass
-class FraudMemory:
-    """Fraud memory entry for deterministic lookup."""
-    pattern: FraudPattern
-    confidence: float
-    last_seen: datetime
-    frequency: int
-    risk_score: float
-    metadata: Dict[str, Any]
 
 
 class FraudMemoryLookup:
