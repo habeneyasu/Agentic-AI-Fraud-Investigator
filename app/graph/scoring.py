@@ -1,9 +1,7 @@
-"""Hybrid risk scoring system combining rule-based and AI context scoring."""
+"""Hybrid risk scoring system - Clean Architecture Implementation."""
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from dataclasses import dataclass
-from enum import Enum
 import json
 import re
 
@@ -11,50 +9,11 @@ from app.core.logging import get_logger
 from app.core.config import get_settings
 from app.llm.client import LLMClient, LLMProvider
 from app.llm.prompts import get_fraud_analysis_prompt
+from app.shared.enums import ScoringMode, RiskCategory
+from app.shared.models import RiskFactor, ScoringResult
 
 logger = get_logger(__name__)
 settings = get_settings()
-
-
-class ScoringMode(str, Enum):
-    """Scoring mode types."""
-    RULES_ONLY = "rules_only"
-    AI_ONLY = "ai_only"
-    HYBRID = "hybrid"
-
-
-class RiskCategory(str, Enum):
-    """Risk categories."""
-    TRANSACTION = "transaction"
-    DEVICE = "device"
-    GEO = "geo"
-    SANCTIONS = "sanctions"
-    BEHAVIOR = "behavior"
-    AI_CONTEXT = "ai_context"
-
-
-@dataclass
-class RiskFactor:
-    """Risk factor for scoring."""
-    category: RiskCategory
-    factor: str
-    weight: float
-    value: float
-    description: str
-
-
-@dataclass
-class ScoringResult:
-    """Scoring result."""
-    risk_score: float
-    risk_level: str
-    confidence: float
-    factors: List[RiskFactor]
-    explanation: str
-    scoring_mode: ScoringMode
-    timestamp: datetime
-    rule_score: Optional[float] = None
-    ai_score: Optional[float] = None
 
 
 class HybridRiskScorer:

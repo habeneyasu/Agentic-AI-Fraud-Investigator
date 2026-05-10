@@ -1,37 +1,34 @@
-"""FastAPI application for Agentic AI Fraud Investigator."""
+"""
+Agentic AI Fraud Investigator — FastAPI application entry point.
+"""
 
 from contextlib import asynccontextmanager
-from typing import Dict, Any
-
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.api.alerts import router
 
 logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager."""
-    logger.info("Starting Agentic AI Fraud Investigator API")
+    logger.info("Starting Agentic AI Fraud Investigator API",
+                env=settings.environment, version=settings.app_version)
     yield
     logger.info("Shutting down Agentic AI Fraud Investigator API")
 
 
-# Create FastAPI application
 app = FastAPI(
     title="Agentic AI Fraud Investigator",
-    description="AI-powered fraud detection and investigation system",
-    version="1.0.0",
-    lifespan=lifespan
+    description="AI-powered fraud detection and investigation system for Andela Digital Bank",
+    version=settings.app_version,
+    lifespan=lifespan,
 )
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -41,79 +38,50 @@ app.add_middleware(
 )
 
 
-# Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Handle uncaught exceptions."""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"error": "Internal server error", "request_id": getattr(request.state, "request_id", None)}
-    )
+    return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions."""
-    logger.warning(f"HTTP exception: {exc.status_code} - {exc.detail}")
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": exc.detail, "request_id": getattr(request.state, "request_id", None)}
-    )
-
-
-# Health check endpoint
 @app.get("/health", tags=["Health"])
-async def health_check() -> Dict[str, Any]:
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "version": "1.0.0",
-        "service": "Agentic AI Fraud Investigator"
-    }
+async def health_check():
+    return {"status": "healthy", "version": settings.app_version,
+            "service": settings.app_name, "env": settings.environment}
 
 
-@app.get("/")
-async def root() -> Dict[str, str]:
-    """Root endpoint."""
-    return {"message": "Agentic AI Fraud Investigator API", "version": "1.0.0"}
+@app.get("/", tags=["Root"])
+async def root():
+    return {"message": settings.app_name, "version": settings.app_version, "docs": "/docs"}
 
 
+# ── Register routers ──────────────────────────────────────────────────────────
+from app.api.alerts import router as alerts_router
+from app.api.hitl import router as hitl_router
+from app.api.audit import router as audit_router
+from app.api.transactions import router as transactions_router
+from app.api.kyc import router as kyc_router
+from app.api.sanctions import router as sanctions_router
+from app.api.triage import router as triage_router
+from app.api.investigation import router as investigation_router
+from app.api.fraud_memory import router as fraud_memory_router
 
-app.include_router(router, prefix="/api/alerts")
-
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Log requests with unique IDs."""
-    import uuid
-    import time
-    
-    request_id = str(uuid.uuid4())
-    request.state.request_id = request_id
-    start_time = time.time()
-    
-    response = await call_next(request)
-    
-    process_time = time.time() - start_time
-    logger.info(
-        "Request completed",
-        method=request.method,
-        url=str(request.url),
-        request_id=request_id,
-        status_code=response.status_code,
-        process_time_ms=round(process_time * 1000, 2)
-    )
-    
-    response.headers["X-Request-ID"] = request_id
-    return response
+app.include_router(alerts_router, prefix="/v1")
+app.include_router(hitl_router)
+app.include_router(audit_router)
+app.include_router(transactions_router, prefix="/v1")
+app.include_router(kyc_router, prefix="/v1")
+app.include_router(sanctions_router, prefix="/v1")
+app.include_router(triage_router, prefix="/v1")
+app.include_router(investigation_router, prefix="/v1")
+app.include_router(fraud_memory_router, prefix="/v1")
 
 
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=settings.DEBUG,
-        log_level="info"
+        host=settings.host,
+        port=settings.port,
+        reload=True,
+        log_level=settings.log_level.lower(),
     )

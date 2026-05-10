@@ -2,76 +2,14 @@
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-from dataclasses import dataclass
-from enum import Enum
 from collections import defaultdict
 import math
 
 from app.core.logging import get_logger
+from app.shared.enums import AnomalyType
+from app.shared.models import DeviceInfo, GeoLocation, LoginAttempt, KYCAnomaly
 
 logger = get_logger(__name__)
-
-
-class AnomalyType(str, Enum):
-    """KYC anomaly types."""
-    NEW_DEVICE = "new_device"
-    SUSPICIOUS_DEVICE = "suspicious_device"
-    GEO_LOCATION_ANOMALY = "geo_location_anomaly"
-    IMPOSSIBLE_TRAVEL = "impossible_travel"
-    HIGH_RISK_LOCATION = "high_risk_location"
-    UNUSUAL_TIME = "unusual_time"
-    MULTIPLE_FAILED_ATTEMPTS = "multiple_failed_attempts"
-    ACCOUNT_TAKEOVER = "account_takeover"
-
-
-@dataclass
-class DeviceInfo:
-    """Device information for KYC analysis."""
-    device_id: str
-    device_type: str
-    user_agent: str
-    ip_address: str
-    fingerprint: Dict[str, Any]
-    first_seen: datetime
-    last_seen: datetime
-    usage_count: int
-    is_trusted: bool = False
-
-
-@dataclass
-class GeoLocation:
-    """Geographic location information."""
-    ip_address: str
-    country: str
-    city: str
-    latitude: float
-    longitude: float
-    isp: str
-    is_proxy: bool
-    is_vpn: bool
-    risk_score: float
-    last_seen: datetime = datetime.utcnow()
-
-
-@dataclass
-class LoginAttempt:
-    """Login attempt information."""
-    timestamp: datetime
-    device_id: str
-    ip_address: str
-    location: GeoLocation
-    success: bool
-    failure_reason: Optional[str] = None
-
-
-@dataclass
-class KYCAnomaly:
-    """KYC anomaly detection result."""
-    anomaly_type: AnomalyType
-    severity: str
-    confidence: float
-    description: str
-    metadata: Dict[str, Any]
 
 
 class DeviceAnalyzer:
