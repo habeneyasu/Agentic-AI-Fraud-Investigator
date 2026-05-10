@@ -1,20 +1,25 @@
-"""Mock risk scoring system with random and rule-based options."""
+"""Hybrid risk scoring system combining rule-based and AI context scoring."""
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
-import random
+import json
+import re
 
 from app.core.logging import get_logger
+from app.core.config import get_settings
+from app.llm.client import LLMClient, LLMProvider
+from app.llm.prompts import get_fraud_analysis_prompt
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 
 class ScoringMode(str, Enum):
     """Scoring mode types."""
-    RANDOM = "random"
     RULES_ONLY = "rules_only"
+    AI_ONLY = "ai_only"
     HYBRID = "hybrid"
 
 
@@ -25,7 +30,7 @@ class RiskCategory(str, Enum):
     GEO = "geo"
     SANCTIONS = "sanctions"
     BEHAVIOR = "behavior"
-    IDENTITY = "identity"
+    AI_CONTEXT = "ai_context"
 
 
 @dataclass
@@ -48,115 +53,86 @@ class ScoringResult:
     explanation: str
     scoring_mode: ScoringMode
     timestamp: datetime
+    rule_score: Optional[float] = None
+    ai_score: Optional[float] = None
 
 
-class MockRiskScorer:
-    """Mock risk scoring system."""
+class HybridRiskScorer:
+    """Hybrid risk scoring system combining rules and AI context."""
     
-    def __init__(self, mode: ScoringMode = ScoringMode.RANDOM):
+    def __init__(self, mode: ScoringMode = ScoringMode.HYBRID, 
+                 llm_provider: LLMProvider = LLMProvider.CEREBRAS):
         self.mode = mode
+        self.llm_provider = llm_provider
+        self.llm_client = LLMClient(llm_provider)
         self.rules = self._load_rules()
         
     def _load_rules(self) -> Dict[str, Dict[str, Any]]:
-        """Load scoring rules."""
+        """Load scoring rules from configuration."""
         return {
-            'transaction': {
-                'high_amount_threshold': 10000
-            },
-            'device': {
-                'new_device_penalty': 0.3
-            },
-            'geo': {
-                'high_risk_country_penalty': 0.5
-            },
-            'sanctions': {
-                'sanctioned_entity_penalty': 0.8
-            },
-            'behavior': {
-                'failed_login_penalty': 0.2
-            },
-            'identity': {
-                'synthetic_identity_penalty': 0.7
-            }
+            'transaction': {'threshold': settings.transaction_amount_threshold, 'weight': 0.3},
+            'device': {'new_device': 0.2, 'unknown_device': 0.3, 'weight': 0.2},
+            'geo': {'high_risk_country': 0.4, 'unusual_location': 0.2, 'weight': 0.25},
+            'sanctions': {'sanctioned': 0.8, 'pep': 0.5, 'weight': 0.35},
+            'behavior': {'failed_login': 0.15, 'unusual_timing': 0.1, 'high_frequency': 0.2, 'weight': 0.2}
         }
     
     async def calculate_risk_score(self, event: Dict[str, Any]) -> ScoringResult:
         """Calculate risk score for event."""
         logger.info(f"Calculating risk score using {self.mode.value} mode")
         
-        if self.mode == ScoringMode.RANDOM:
-            return await self._random_scoring(event)
-        elif self.mode == ScoringMode.RULES_ONLY:
+        if self.mode == ScoringMode.RULES_ONLY:
             return await self._rules_based_scoring(event)
-        else:  # HYBRID
+        elif self.mode == ScoringMode.AI_ONLY:
+            return await self._ai_based_scoring(event)
+        else:
             return await self._hybrid_scoring(event)
     
-    async def _random_scoring(self, event: Dict[str, Any]) -> ScoringResult:
-        """Generate random risk score."""
-        event_type = event.get('event_type', 'unknown')
-        
-        if event_type == 'transaction':
-            base_score = max(0.0, min(random.uniform(0.0, 1.0) + random.uniform(-0.1, 0.3), 1.0))
-        elif event_type == 'login':
-            base_score = max(0.0, min(random.uniform(0.0, 1.0) + random.uniform(-0.2, 0.2), 1.0))
-        else:
-            base_score = random.uniform(0.0, 1.0)
-        
-        return ScoringResult(
-            risk_score=base_score,
-            risk_level=self._get_risk_level(base_score),
-            confidence=random.uniform(0.6, 0.9),
-            factors=self._generate_mock_factors(event, base_score),
-            explanation=f"Random scoring generated score {base_score:.3f}",
-            scoring_mode=ScoringMode.RANDOM,
-            timestamp=datetime.utcnow()
-        )
-    
     async def _rules_based_scoring(self, event: Dict[str, Any]) -> ScoringResult:
-        """Calculate risk score using rules."""
+        """Calculate risk score using rule-based approach."""
         score = 0.0
         factors = []
         
         # Transaction rules
-        if event.get('amount', 0) > self.rules['transaction']['high_amount_threshold']:
-            score += 0.3
+        if event.get('amount', 0) > self.rules['transaction']['threshold']:
+            score += self.rules['transaction']['weight']
             factors.append(RiskFactor(
                 category=RiskCategory.TRANSACTION,
                 factor="high_amount",
-                weight=0.3,
+                weight=self.rules['transaction']['weight'],
                 value=event.get('amount', 0),
-                description="High transaction amount detected"
+                description=f"High transaction amount: ${event.get('amount', 0):,.2f}"
             ))
         
         # Device rules
         if event.get('new_device', False):
-            score += self.rules['device']['new_device_penalty']
+            score += self.rules['device']['new_device']
             factors.append(RiskFactor(
                 category=RiskCategory.DEVICE,
                 factor="new_device",
-                weight=self.rules['device']['new_device_penalty'],
+                weight=self.rules['device']['new_device'],
                 value=1.0,
                 description="New device detected"
             ))
         
-        # Geo rules
+        # Geographic rules
         if event.get('high_risk_country', False):
-            score += self.rules['geo']['high_risk_country_penalty']
+            score += self.rules['geo']['high_risk_country']
             factors.append(RiskFactor(
                 category=RiskCategory.GEO,
                 factor="high_risk_country",
-                weight=self.rules['geo']['high_risk_country_penalty'],
+                weight=self.rules['geo']['high_risk_country'],
                 value=1.0,
                 description="High-risk country detected"
             ))
         
         # Sanctions rules
         if event.get('sanctioned_entity', False):
-            score += self.rules['sanctions']['sanctioned_entity_penalty']
+            score += self.rules['sanctions']['sanctioned']
             factors.append(RiskFactor(
                 category=RiskCategory.SANCTIONS,
                 factor="sanctioned_entity",
-                weight=self.rules['sanctions']['sanctioned_entity_penalty'],
+                weight=self.rules['sanctions']['sanctioned'],
                 value=1.0,
                 description="Sanctioned entity detected"
             ))
@@ -164,53 +140,122 @@ class MockRiskScorer:
         # Behavior rules
         failed_attempts = event.get('failed_attempts', 0)
         if failed_attempts > 3:
-            actual_contribution = self.rules['behavior']['failed_login_penalty'] * min(failed_attempts / 3, 2)
-            score += actual_contribution
+            behavior_score = self.rules['behavior']['failed_login'] * min(failed_attempts / 3, 2)
+            score += behavior_score
             factors.append(RiskFactor(
                 category=RiskCategory.BEHAVIOR,
                 factor="failed_attempts",
-                weight=actual_contribution,
+                weight=behavior_score,
                 value=failed_attempts,
                 description=f"Multiple failed attempts: {failed_attempts}"
             ))
         
-        capped_score = min(score, 1.0)
+        final_score = min(score, 1.0)
         return ScoringResult(
-            risk_score=capped_score,
-            risk_level=self._get_risk_level(capped_score),
-            confidence=0.8,
+            risk_score=final_score,
+            risk_level=self._get_risk_level(final_score),
+            confidence=0.85,
             factors=factors,
-            explanation=f"Rules-based scoring calculated score {capped_score:.3f}",
+            explanation=f"Rules-based scoring: {final_score:.3f}",
             scoring_mode=ScoringMode.RULES_ONLY,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
+            rule_score=final_score,
+            ai_score=None
         )
+    
+    async def _ai_based_scoring(self, event: Dict[str, Any]) -> ScoringResult:
+        """Calculate risk score using AI analysis."""
+        try:
+            context = {
+                'customer_risk_profile': event.get('risk_profile', 'unknown'),
+                'historical_patterns': event.get('historical_patterns', 'none'),
+                'previous_alerts': event.get('previous_alerts', 'none'),
+                'account_age': event.get('account_age_days', 'unknown'),
+                'typical_amount': event.get('typical_amount', 'unknown')
+            }
+            
+            ai_result = await self.llm_client.analyze_transaction(event, context)
+            ai_score = self._parse_ai_score(ai_result)
+            
+            factors = [RiskFactor(
+                category=RiskCategory.AI_CONTEXT,
+                factor="ai_analysis",
+                weight=ai_score,
+                value=ai_score,
+                description="AI-based risk assessment"
+            )]
+            
+            return ScoringResult(
+                risk_score=ai_score,
+                risk_level=self._get_risk_level(ai_score),
+                confidence=0.75,
+                factors=factors,
+                explanation=f"AI-based scoring: {ai_score:.3f}",
+                scoring_mode=ScoringMode.AI_ONLY,
+                timestamp=datetime.utcnow(),
+                rule_score=None,
+                ai_score=ai_score
+            )
+            
+        except Exception as e:
+            logger.error(f"AI scoring failed: {e}")
+            return await self._rules_based_scoring(event)
     
     async def _hybrid_scoring(self, event: Dict[str, Any]) -> ScoringResult:
         """Calculate risk score using hybrid approach."""
         rules_result = await self._rules_based_scoring(event)
-        random_factor = random.uniform(-0.1, 0.1)
-        hybrid_score = max(0.0, min(rules_result.risk_score + random_factor, 1.0))
+        ai_result = await self._ai_based_scoring(event)
         
-        # Blend factors
-        hybrid_factors = rules_result.factors.copy()
-        if abs(random_factor) > 0.05:
-            hybrid_factors.append(RiskFactor(
-                category=RiskCategory.IDENTITY,
-                factor="random_variation",
-                weight=abs(random_factor),
-                value=random_factor,
-                description="Random variation applied"
-            ))
+        # Dynamic weighting based on AI confidence
+        rule_weight = 0.8 if ai_result.confidence < 0.5 else (0.4 if ai_result.confidence > 0.9 else 0.6)
+        ai_weight = 1.0 - rule_weight
+        
+        hybrid_score = (rules_result.risk_score * rule_weight) + (ai_result.risk_score * ai_weight)
+        hybrid_score = min(hybrid_score, 1.0)
+        
+        hybrid_factors = rules_result.factors + ai_result.factors + [RiskFactor(
+            category=RiskCategory.AI_CONTEXT,
+            factor="hybrid_combination",
+            weight=0.1,
+            value=hybrid_score,
+            description=f"Hybrid: {rule_weight:.0%} rules + {ai_weight:.0%} AI"
+        )]
+        
+        hybrid_confidence = (rules_result.confidence * rule_weight) + (ai_result.confidence * ai_weight)
         
         return ScoringResult(
             risk_score=hybrid_score,
             risk_level=self._get_risk_level(hybrid_score),
-            confidence=0.85,
+            confidence=hybrid_confidence,
             factors=hybrid_factors,
-            explanation=f"Hybrid scoring: {rules_result.risk_score:.3f} + {random_factor:.3f}",
+            explanation=f"Hybrid: {rules_result.risk_score:.3f} × {rule_weight:.0%} + {ai_result.risk_score:.3f} × {ai_weight:.0%} = {hybrid_score:.3f}",
             scoring_mode=ScoringMode.HYBRID,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
+            rule_score=rules_result.risk_score,
+            ai_score=ai_result.risk_score
         )
+    
+    def _parse_ai_score(self, ai_result: Dict[str, Any]) -> float:
+        """Parse risk score from AI response."""
+        try:
+            response_text = ai_result.get('response', '')
+            
+            if response_text.startswith('{'):
+                ai_response = json.loads(response_text)
+                score = ai_response.get('overall_risk_score', 50) / 100.0
+                return min(max(score, 0.0), 1.0)
+            
+            # Extract score from text
+            score_match = re.search(r'risk[_\s]*score[:\s]*([0-9.]+)', response_text.lower())
+            if score_match:
+                score = float(score_match.group(1)) / 100.0
+                return min(max(score, 0.0), 1.0)
+            
+            return 0.5
+                
+        except Exception as e:
+            logger.warning(f"Failed to parse AI score: {e}")
+            return 0.5
     
     def _get_risk_level(self, score: float) -> str:
         """Get risk level from score."""
@@ -224,58 +269,27 @@ class MockRiskScorer:
             return "LOW"
         else:
             return "MINIMAL"
-    
-    def _generate_mock_factors(self, event: Dict[str, Any], score: float) -> List[RiskFactor]:
-        """Generate mock risk factors for random scoring."""
-        factors = []
-        
-        if score > 0.7:
-            factors.append(RiskFactor(
-                category=RiskCategory.TRANSACTION,
-                factor="high_risk_pattern",
-                weight=0.4,
-                value=score,
-                description="High-risk pattern detected"
-            ))
-        
-        if score > 0.5:
-            factors.append(RiskFactor(
-                category=RiskCategory.DEVICE,
-                factor="anomaly_detected",
-                weight=0.3,
-                value=score,
-                description="Device anomaly detected"
-            ))
-        
-        if score > 0.3:
-            factors.append(RiskFactor(
-                category=RiskCategory.BEHAVIOR,
-                factor="unusual_behavior",
-                weight=0.2,
-                value=score,
-                description="Unusual behavior pattern"
-            ))
-        
-        return factors
 
 
-# Global mock scorer instance
-mock_scorer = MockRiskScorer(ScoringMode.RANDOM)
+# Global instances
+hybrid_scorer = HybridRiskScorer()
 
 
-def get_mock_scorer(mode: ScoringMode = ScoringMode.RANDOM) -> MockRiskScorer:
-    """Get mock scorer instance."""
-    return MockRiskScorer(mode)
+def get_scorer(mode: ScoringMode = ScoringMode.HYBRID, 
+               provider: LLMProvider = LLMProvider.CEREBRAS) -> HybridRiskScorer:
+    """Get scorer instance."""
+    return HybridRiskScorer(mode, provider)
 
 
 async def calculate_risk_score(event: Dict[str, Any], 
-                           mode: ScoringMode = ScoringMode.RANDOM) -> ScoringResult:
-    """Calculate risk score using mock scorer."""
-    return await mock_scorer.calculate_risk_score(event)
+                           mode: ScoringMode = ScoringMode.HYBRID) -> ScoringResult:
+    """Calculate risk score using hybrid scorer."""
+    return await hybrid_scorer.calculate_risk_score(event)
 
 
-def update_scoring_mode(mode: ScoringMode) -> None:
+def update_scoring_mode(mode: ScoringMode, 
+                     provider: LLMProvider = LLMProvider.CEREBRAS) -> None:
     """Update global scoring mode."""
-    global mock_scorer
-    mock_scorer = MockRiskScorer(mode)
-    logger.info(f"Updated scoring mode to: {mode.value}")
+    global hybrid_scorer
+    hybrid_scorer = HybridRiskScorer(mode, provider)
+    logger.info(f"Updated scoring mode to: {mode.value} with provider: {provider.value}")
