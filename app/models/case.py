@@ -1,9 +1,12 @@
 """Case model for fraud investigation cases."""
 
-from sqlalchemy import Column, String, Text, Enum, JSON, Float, ForeignKey, Boolean
+from sqlalchemy import Column, String, Text, Enum, JSON, Float, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import relationship
 import enum
+from datetime import datetime
+from typing import Optional
 
+from pydantic import BaseModel, Field
 from .base import BaseModel
 
 
@@ -165,6 +168,62 @@ class Case(BaseModel):
         String(50), 
         nullable=True,
         comment="Timestamp when case was closed"
+    )
+    
+    # Human-in-the-loop fields
+    human_decision = Column(
+        String(20),
+        nullable=True,
+        comment="Human decision: APPROVE, REJECT, ESCALATE"
+    )
+    human_reasoning = Column(
+        Text,
+        nullable=True,
+        comment="Human reasoning for decision"
+    )
+    human_notes = Column(
+        Text,
+        nullable=True,
+        comment="Additional human notes"
+    )
+    human_confidence = Column(
+        Float,
+        nullable=True,
+        comment="Human confidence level 1-10"
+    )
+    reviewed_by = Column(
+        String(200),
+        nullable=True,
+        comment="ID of user who reviewed the case"
+    )
+    reviewed_at = Column(
+        DateTime,
+        nullable=True,
+        comment="Timestamp when case was reviewed"
+    )
+    
+    # AI analysis fields
+    ai_recommendation = Column(
+        Text,
+        nullable=True,
+        comment="AI-generated recommendations"
+    )
+    ai_confidence = Column(
+        Float,
+        nullable=True,
+        comment="AI confidence level 0-1"
+    )
+    
+    # Investigation resumption
+    resumed_by = Column(
+        String(200),
+        nullable=True,
+        comment="ID of user who resumed the case"
+    )
+    resumed_at = Column(
+        DateTime,
+        nullable=True,
+        comment="Timestamp when case was resumed"
     )
     
     # Relationships
