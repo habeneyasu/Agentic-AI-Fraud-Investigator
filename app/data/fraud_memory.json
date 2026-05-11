@@ -1,0 +1,97 @@
+[
+  {
+    "pattern_id": "PATTERN001",
+    "pattern_type": "VELOCITY_SPIKE",
+    "entity_id": "CUST003",
+    "entity_type": "customer",
+    "confidence": 0.92,
+    "risk_score": 0.88,
+    "frequency": 3,
+    "last_seen": "2025-01-10T16:45:00Z",
+    "first_seen": "2025-01-08T09:30:00Z",
+    "expires_at": "2025-02-10T16:45:00Z",
+    "status": "ACTIVE",
+    "description": "Multiple high-value transactions in short timeframe",
+    "metadata": {
+      "transaction_count": 5,
+      "total_amount": 85000.00,
+      "time_window_hours": 48
+    }
+  },
+  {
+    "pattern_id": "PATTERN002",
+    "pattern_type": "GEO_ANOMALY",
+    "entity_id": "CUST003", 
+    "entity_type": "customer",
+    "confidence": 0.85,
+    "risk_score": 0.79,
+    "frequency": 1,
+    "last_seen": "2025-01-10T02:30:00Z",
+    "first_seen": "2025-01-10T02:30:00Z",
+    "expires_at": "2025-02-10T02:30:00Z",
+    "status": "ACTIVE",
+    "description": "Login from high-risk geographic location",
+    "metadata": {
+      "location": "RU - Moscow",
+      "usual_location": "US - Chicago",
+      "distance_km": 7500
+    }
+  },
+  {
+    "pattern_id": "PATTERN003",
+    "pattern_type": "DEVICE_ANOMALY",
+    "entity_id": "CUST001",
+    "entity_type": "customer", 
+    "confidence": 0.78,
+    "risk_score": 0.65,
+    "frequency": 1,
+    "last_seen": "2025-01-09T18:45:00Z",
+    "first_seen": "2025-01-09T18:45:00Z",
+    "expires_at": "2025-02-09T18:45:00Z",
+    "status": "ACTIVE",
+    "description": "New device login attempt",
+    "metadata": {
+      "new_device": "mobile - iOS 17",
+      "usual_device": "desktop - Windows 10",
+      "device_fingerprint_match": 0.25
+    }
+  },
+  {
+    "pattern_id": "PATTERN004",
+    "pattern_type": "BRUTE_FORCE",
+    "entity_id": "CUST002",
+    "entity_type": "customer",
+    "confidence": 0.88,
+    "risk_score": 0.82,
+    "frequency": 1,
+    "last_seen": "2025-01-08T14:20:00Z",
+    "first_seen": "2025-01-08T14:20:00Z",
+    "expires_at": "2025-02-08T14:20:00Z",
+    "status": "ACTIVE",
+    "description": "Multiple failed login attempts detected",
+    "metadata": {
+      "failed_attempts": 7,
+      "time_window_minutes": 15,
+      "ip_addresses": ["203.0.113.1", "203.0.113.2"]
+    }
+  },
+  {
+    "pattern_id": "PATTERN005",
+    "pattern_type": "UNUSUAL_DESTINATION",
+    "entity_id": "CUST003",
+    "entity_type": "customer",
+    "confidence": 0.81,
+    "risk_score": 0.73,
+    "frequency": 2,
+    "last_seen": "2025-01-07T09:15:00Z",
+    "first_seen": "2025-01-05T14:30:00Z",
+    "expires_at": "2025-02-07T09:15:00Z",
+    "status": "ACTIVE",
+    "description": "Transactions to high-risk destination countries",
+    "metadata": {
+      "countries": ["IR", "KP"],
+      "total_amount": 60000.00,
+      "transaction_count": 2
+    }
+  }
+]

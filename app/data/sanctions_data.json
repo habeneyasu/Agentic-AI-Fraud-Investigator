@@ -1,0 +1,91 @@
+{
+  "sanctions_entries": [
+    {
+      "entity_id": "ENTITY001",
+      "entity_name": "Global Trading Corp",
+      "entity_type": "company",
+      "sanctions_list": ["OFAC", "EU", "UN"],
+      "sanction_type": "FINANCIAL",
+      "risk_level": "CRITICAL",
+      "countries": ["IR", "KP", "SY"],
+      "date_added": "2023-06-15",
+      "reason": "Nuclear proliferation activities",
+      "risk_score": 0.95
+    },
+    {
+      "entity_id": "ENTITY002",
+      "entity_name": "John Doe",
+      "entity_type": "individual",
+      "sanctions_list": ["OFAC"],
+      "sanction_type": "TERRORISM",
+      "risk_level": "HIGH",
+      "countries": ["AF", "PK"],
+      "date_added": "2022-11-20",
+      "reason": "Terrorist financing",
+      "risk_score": 0.88
+    },
+    {
+      "entity_id": "ENTITY003",
+      "entity_name": "North Shipping Lines",
+      "entity_type": "company",
+      "sanctions_list": ["EU", "UN"],
+      "sanction_type": "TRADE",
+      "risk_level": "HIGH",
+      "countries": ["IR", "SY"],
+      "date_added": "2023-02-10",
+      "reason": "Trade violations",
+      "risk_score": 0.75
+    }
+  ],
+  "country_risks": [
+    {
+      "country_code": "IR",
+      "country_name": "Iran",
+      "risk_level": "CRITICAL",
+      "sanctions_active": true,
+      "risk_score": 0.95
+    },
+    {
+      "country_code": "KP",
+      "country_name": "North Korea",
+      "risk_level": "CRITICAL",
+      "sanctions_active": true,
+      "risk_score": 0.98
+    },
+    {
+      "country_code": "SY",
+      "country_name": "Syria",
+      "risk_level": "HIGH",
+      "sanctions_active": true,
+      "risk_score": 0.85
+    },
+    {
+      "country_code": "RU",
+      "country_name": "Russia",
+      "risk_level": "MEDIUM",
+      "sanctions_active": false,
+      "risk_score": 0.65
+    },
+    {
+      "country_code": "CN",
+      "country_name": "China",
+      "risk_level": "LOW",
+      "sanctions_active": false,
+      "risk_score": 0.35
+    },
+    {
+      "country_code": "AF",
+      "country_name": "Afghanistan",
+      "risk_level": "MEDIUM",
+      "sanctions_active": false,
+      "risk_score": 0.55
+    },
+    {
+      "country_code": "PK",
+      "country_name": "Pakistan",
+      "risk_level": "MEDIUM",
+      "sanctions_active": false,
+      "risk_score": 0.45
+    }
+  ]
+}

@@ -6,11 +6,11 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 from app.services.base import BaseService
-from app.shared.enums import Priority
+from app.shared.enums import CasePriority
 
 
-class TriageService(BaseService):
-    """Service for fraud case triage and prioritization."""
+class CaseTriageRulesService(BaseService):
+    """Deterministic rules engine for case prioritisation and routing hints."""
     
     def __init__(self):
         super().__init__()
@@ -59,7 +59,7 @@ class TriageService(BaseService):
                 "priority": priority,
                 "priority_score": priority_score,
                 "escalation_required": priority_score >= 0.6,
-                "auto_action": self._determine_auto_action(priority_score, risk_score),
+                "auto_action": self._resolve_auto_action_for_scores(priority_score, risk_score),
                 "human_review_required": priority_score >= 0.4,
                 "reasoning": self._generate_reasoning(risk_score, amount, customer_tier, alert_count),
                 "confidence": min(priority_score + 0.2, 1.0),
@@ -119,8 +119,8 @@ class TriageService(BaseService):
     ) -> Dict[str, Any]:
         """Determine automatic action."""
         action_data = {"risk_score": risk_score, "triage_decision": triage_decision, "customer_risk_level": customer_risk_level}
-        
-        auto_action = self._determine_auto_action(action_data)
+        priority_score = risk_score  # align with rule thresholds for this endpoint
+        auto_action = self._resolve_auto_action_for_scores(priority_score, risk_score)
         action_confidence = self._calculate_action_confidence(action_data)
         
         return self._generate_response({
@@ -144,19 +144,19 @@ class TriageService(BaseService):
         tier_weights = {"vip": 1.0, "premium": 0.8, "standard": 0.6, "basic": 0.4}
         return tier_weights.get(tier.lower(), 0.6)
     
-    def _determine_triage_decision(self, priority_score: float) -> tuple[str, Priority]:
+    def _determine_triage_decision(self, priority_score: float) -> tuple[str, CasePriority]:
         """Determine triage decision and priority."""
         if priority_score >= 0.8:
-            return "ESCALATE_IMMEDIATELY", Priority.CRITICAL
+            return "ESCALATE_IMMEDIATELY", CasePriority.CRITICAL
         elif priority_score >= 0.6:
-            return "INVESTIGATE_HIGH_PRIORITY", Priority.HIGH
+            return "INVESTIGATE_HIGH_PRIORITY", CasePriority.HIGH
         elif priority_score >= 0.4:
-            return "STANDARD_INVESTIGATION", Priority.MEDIUM
+            return "STANDARD_INVESTIGATION", CasePriority.MEDIUM
         else:
-            return "MONITOR_ONLY", Priority.LOW
+            return "MONITOR_ONLY", CasePriority.LOW
     
-    def _determine_auto_action(self, priority_score: float, risk_score: float) -> str:
-        """Determine automatic action."""
+    def _resolve_auto_action_for_scores(self, priority_score: float, risk_score: float) -> str:
+        """Map scores to a coarse automated action label."""
         if risk_score >= 0.9:
             return "FREEZE_ACCOUNT"
         elif risk_score >= 0.7:
@@ -181,16 +181,16 @@ class TriageService(BaseService):
         
         return "; ".join(reasons) if reasons else "Standard risk assessment"
     
-    def _determine_priority_level(self, score: float) -> Priority:
+    def _determine_priority_level(self, score: float) -> CasePriority:
         """Determine priority level."""
         if score >= 0.8:
-            return Priority.CRITICAL
+            return CasePriority.CRITICAL
         elif score >= 0.6:
-            return Priority.HIGH
+            return CasePriority.HIGH
         elif score >= 0.4:
-            return Priority.MEDIUM
+            return CasePriority.MEDIUM
         else:
-            return Priority.LOW
+            return CasePriority.LOW
     
     def _check_escalation_rules(self, risk_score: float, amount: float, alert_types: List[str]) -> bool:
         """Check if escalation is required."""

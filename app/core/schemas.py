@@ -1,16 +1,15 @@
-"""
-Core schemas - Clean Architecture Implementation.
-"""
+"""Re-exports for LLM / triage schema models used outside `app.shared.models`."""
 
-# Import all schemas from centralized location
 from app.shared.models import (
-    TriageAnalysis, TriageResult, CaseInput, HistoricalContext
+    CaseInput,
+    CaseTriageAssessment,
+    HistoricalContext,
+    TriageAnalysis,
 )
 
-# Re-export for backward compatibility
 __all__ = [
-    'TriageAnalysis',
-    'TriageResult', 
-    'CaseInput',
-    'HistoricalContext'
+    "CaseInput",
+    "CaseTriageAssessment",
+    "HistoricalContext",
+    "TriageAnalysis",
 ]

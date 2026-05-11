@@ -6,9 +6,14 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, TypeVar, Generic
 from datetime import datetime
 
-from app.data.models import (
-    InvestigationModel, InvestigationResult, AlertModel, EvidenceModel,
-    TransactionModel, KYCEventModel, EntityModel
+from app.shared.models import (
+    EvidenceRecord,
+    FraudAlertRecord,
+    InvestigationCase,
+    InvestigationResult,
+    KycEventRecord,
+    SanctionsParty,
+    TransactionRecord,
 )
 from app.core.logging import get_logger
 
@@ -59,27 +64,27 @@ class BaseRepository(ABC, Generic[T]):
         pass
 
 
-class InvestigationRepository(BaseRepository[InvestigationModel]):
+class InvestigationRepository(BaseRepository[InvestigationCase]):
     """Repository for investigation data."""
     
-    def _get_entity_id(self, entity: InvestigationModel) -> str:
+    def _get_entity_id(self, entity: InvestigationCase) -> str:
         return entity.investigation_id
     
-    def get_by_customer(self, customer_id: str) -> List[InvestigationModel]:
+    def get_by_customer(self, customer_id: str) -> List[InvestigationCase]:
         """Get investigations by customer ID."""
         return [
             inv for inv in self._storage.values() 
             if inv.customer_id == customer_id
         ]
     
-    def get_by_status(self, status: str) -> List[InvestigationModel]:
+    def get_by_status(self, status: str) -> List[InvestigationCase]:
         """Get investigations by status."""
         return [
             inv for inv in self._storage.values() 
             if inv.metadata.get("status") == status
         ]
     
-    def get_by_date_range(self, start_date: datetime, end_date: datetime) -> List[InvestigationModel]:
+    def get_by_date_range(self, start_date: datetime, end_date: datetime) -> List[InvestigationCase]:
         """Get investigations within date range."""
         return [
             inv for inv in self._storage.values()
@@ -108,27 +113,27 @@ class InvestigationResultRepository(BaseRepository[InvestigationResult]):
         ]
 
 
-class AlertRepository(BaseRepository[AlertModel]):
+class AlertRepository(BaseRepository[FraudAlertRecord]):
     """Repository for alert data."""
     
-    def _get_entity_id(self, entity: AlertModel) -> str:
+    def _get_entity_id(self, entity: FraudAlertRecord) -> str:
         return entity.alert_id
     
-    def get_by_investigation(self, investigation_id: str) -> List[AlertModel]:
+    def get_by_investigation(self, investigation_id: str) -> List[FraudAlertRecord]:
         """Get alerts by investigation ID."""
         return [
             alert for alert in self._storage.values()
             if alert.investigation_id == investigation_id
         ]
     
-    def get_by_type(self, alert_type: str) -> List[AlertModel]:
+    def get_by_type(self, alert_type: str) -> List[FraudAlertRecord]:
         """Get alerts by type."""
         return [
             alert for alert in self._storage.values()
             if alert.alert_type.value == alert_type
         ]
     
-    def get_by_severity(self, severity: str) -> List[AlertModel]:
+    def get_by_severity(self, severity: str) -> List[FraudAlertRecord]:
         """Get alerts by severity."""
         return [
             alert for alert in self._storage.values()
@@ -136,27 +141,27 @@ class AlertRepository(BaseRepository[AlertModel]):
         ]
 
 
-class EvidenceRepository(BaseRepository[EvidenceModel]):
+class EvidenceRepository(BaseRepository[EvidenceRecord]):
     """Repository for evidence data."""
     
-    def _get_entity_id(self, entity: EvidenceModel) -> str:
+    def _get_entity_id(self, entity: EvidenceRecord) -> str:
         return entity.evidence_id
     
-    def get_by_investigation(self, investigation_id: str) -> List[EvidenceModel]:
+    def get_by_investigation(self, investigation_id: str) -> List[EvidenceRecord]:
         """Get evidence by investigation ID."""
         return [
             evidence for evidence in self._storage.values()
             if evidence.investigation_id == investigation_id
         ]
     
-    def get_by_category(self, category: str) -> List[EvidenceModel]:
+    def get_by_category(self, category: str) -> List[EvidenceRecord]:
         """Get evidence by category."""
         return [
             evidence for evidence in self._storage.values()
             if evidence.category == category
         ]
     
-    def get_by_type(self, evidence_type: str) -> List[EvidenceModel]:
+    def get_by_type(self, evidence_type: str) -> List[EvidenceRecord]:
         """Get evidence by type."""
         return [
             evidence for evidence in self._storage.values()
@@ -164,27 +169,27 @@ class EvidenceRepository(BaseRepository[EvidenceModel]):
         ]
 
 
-class TransactionRepository(BaseRepository[TransactionModel]):
+class TransactionRepository(BaseRepository[TransactionRecord]):
     """Repository for transaction data."""
     
-    def _get_entity_id(self, entity: TransactionModel) -> str:
+    def _get_entity_id(self, entity: TransactionRecord) -> str:
         return entity.transaction_id
     
-    def get_by_customer(self, customer_id: str) -> List[TransactionModel]:
+    def get_by_customer(self, customer_id: str) -> List[TransactionRecord]:
         """Get transactions by customer ID."""
         return [
             tx for tx in self._storage.values()
             if tx.customer_id == customer_id
         ]
     
-    def get_by_amount_range(self, min_amount: float, max_amount: float) -> List[TransactionModel]:
+    def get_by_amount_range(self, min_amount: float, max_amount: float) -> List[TransactionRecord]:
         """Get transactions by amount range."""
         return [
             tx for tx in self._storage.values()
             if min_amount <= tx.amount <= max_amount
         ]
     
-    def get_by_date_range(self, start_date: datetime, end_date: datetime) -> List[TransactionModel]:
+    def get_by_date_range(self, start_date: datetime, end_date: datetime) -> List[TransactionRecord]:
         """Get transactions within date range."""
         return [
             tx for tx in self._storage.values()
@@ -192,20 +197,20 @@ class TransactionRepository(BaseRepository[TransactionModel]):
         ]
 
 
-class KYCEventRepository(BaseRepository[KYCEventModel]):
+class KYCEventRepository(BaseRepository[KycEventRecord]):
     """Repository for KYC event data."""
     
-    def _get_entity_id(self, entity: KYCEventModel) -> str:
+    def _get_entity_id(self, entity: KycEventRecord) -> str:
         return f"{entity.customer_id}_{entity.event_type}_{entity.timestamp.isoformat()}"
     
-    def get_by_customer(self, customer_id: str) -> List[KYCEventModel]:
+    def get_by_customer(self, customer_id: str) -> List[KycEventRecord]:
         """Get KYC events by customer ID."""
         return [
             event for event in self._storage.values()
             if event.customer_id == customer_id
         ]
     
-    def get_by_event_type(self, event_type: str) -> List[KYCEventModel]:
+    def get_by_event_type(self, event_type: str) -> List[KycEventRecord]:
         """Get KYC events by type."""
         return [
             event for event in self._storage.values()
@@ -213,20 +218,20 @@ class KYCEventRepository(BaseRepository[KYCEventModel]):
         ]
 
 
-class EntityRepository(BaseRepository[EntityModel]):
+class EntityRepository(BaseRepository[SanctionsParty]):
     """Repository for entity data."""
     
-    def _get_entity_id(self, entity: EntityModel) -> str:
+    def _get_entity_id(self, entity: SanctionsParty) -> str:
         return f"{entity.name}_{entity.country_code}"
     
-    def get_by_country(self, country_code: str) -> List[EntityModel]:
+    def get_by_country(self, country_code: str) -> List[SanctionsParty]:
         """Get entities by country code."""
         return [
             entity for entity in self._storage.values()
             if entity.country_code == country_code
         ]
     
-    def get_by_type(self, entity_type: str) -> List[EntityModel]:
+    def get_by_type(self, entity_type: str) -> List[SanctionsParty]:
         """Get entities by type."""
         return [
             entity for entity in self._storage.values()

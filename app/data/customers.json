@@ -1,0 +1,44 @@
+[
+  {
+    "customer_id": "CUST001",
+    "name": "John Smith",
+    "email": "john.smith@email.com",
+    "phone": "+1-555-0123",
+    "address": "123 Main St, New York, NY 10001",
+    "date_of_birth": "1985-03-15",
+    "account_created": "2022-01-15",
+    "account_type": "premium",
+    "risk_profile": "medium",
+    "total_transactions": 1247,
+    "total_amount": 284750.00,
+    "last_login": "2025-01-10T14:30:00Z"
+  },
+  {
+    "customer_id": "CUST002", 
+    "name": "Maria Garcia",
+    "email": "maria.garcia@email.com",
+    "phone": "+1-555-0456",
+    "address": "456 Oak Ave, Los Angeles, CA 90001",
+    "date_of_birth": "1990-07-22",
+    "account_created": "2023-03-20",
+    "account_type": "standard",
+    "risk_profile": "low",
+    "total_transactions": 89,
+    "total_amount": 12450.00,
+    "last_login": "2025-01-09T09:15:00Z"
+  },
+  {
+    "customer_id": "CUST003",
+    "name": "Robert Chen",
+    "email": "robert.chen@email.com", 
+    "phone": "+1-555-0789",
+    "address": "789 Pine St, Chicago, IL 60007",
+    "date_of_birth": "1978-11-08",
+    "account_created": "2021-06-10",
+    "account_type": "business",
+    "risk_profile": "high",
+    "total_transactions": 3421,
+    "total_amount": 1256780.00,
+    "last_login": "2025-01-10T16:45:00Z"
+  }
+]

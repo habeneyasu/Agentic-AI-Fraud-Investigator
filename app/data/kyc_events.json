@@ -1,0 +1,78 @@
+[
+  {
+    "customer_id": "CUST003",
+    "event_type": "login_attempt",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "ip_address": "185.220.101.182",
+    "device_info": {
+      "device_type": "desktop",
+      "os": "Windows 10",
+      "browser": "Chrome"
+    },
+    "geo_location": {
+      "country": "RU",
+      "city": "Moscow",
+      "latitude": 55.7558,
+      "longitude": 37.6176
+    },
+    "anomaly_type": "geo_location_mismatch",
+    "risk_score": 0.85
+  },
+  {
+    "customer_id": "CUST001", 
+    "event_type": "device_change",
+    "timestamp": "2025-01-09T18:45:00Z",
+    "ip_address": "192.168.1.100",
+    "device_info": {
+      "device_type": "mobile",
+      "os": "iOS 17",
+      "browser": "Safari"
+    },
+    "geo_location": {
+      "country": "US",
+      "city": "New York",
+      "latitude": 40.7128,
+      "longitude": -74.0060
+    },
+    "anomaly_type": "new_device",
+    "risk_score": 0.65
+  },
+  {
+    "customer_id": "CUST002",
+    "event_type": "multiple_failed_attempts",
+    "timestamp": "2025-01-08T14:20:00Z", 
+    "ip_address": "203.0.113.1",
+    "device_info": {
+      "device_type": "desktop",
+      "os": "Windows 11",
+      "browser": "Firefox"
+    },
+    "geo_location": {
+      "country": "US",
+      "city": "Los Angeles",
+      "latitude": 34.0522,
+      "longitude": -118.2437
+    },
+    "anomaly_type": "brute_force_attempt",
+    "risk_score": 0.75
+  },
+  {
+    "customer_id": "CUST003",
+    "event_type": "suspicious_activity",
+    "timestamp": "2025-01-07T22:15:00Z",
+    "ip_address": "10.0.0.1",
+    "device_info": {
+      "device_type": "desktop",
+      "os": "Windows 10",
+      "browser": "Edge"
+    },
+    "geo_location": {
+      "country": "US",
+      "city": "Chicago",
+      "latitude": 41.8781,
+      "longitude": -87.6298
+    },
+    "anomaly_type": "unusual_access_pattern",
+    "risk_score": 0.55
+  }
+]

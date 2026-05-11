@@ -1,6 +1,4 @@
-"""
-Fraud memory service - Clean Architecture Implementation.
-"""
+"""Fraud pattern memory store."""
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta

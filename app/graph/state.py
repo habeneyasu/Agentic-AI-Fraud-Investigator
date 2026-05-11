@@ -1,32 +1,32 @@
-"""Enterprise investigation state management - Clean Architecture Implementation."""
+"""Investigation graph state."""
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field, validator
 
 from app.shared.enums import InvestigationStatus, TriagePriority
-from app.shared.models import InvestigationState
+from app.shared.models import InvestigationWorkflowState
 
 
 class StateManager:
-    """Enterprise state management for investigation workflow."""
+    """In-memory store for investigation workflow snapshots."""
     
     def __init__(self):
-        self._states: Dict[str, InvestigationState] = {}
+        self._states: Dict[str, InvestigationWorkflowState] = {}
     
-    def get_state(self, case_id: str) -> Optional[InvestigationState]:
+    def get_state(self, case_id: str) -> Optional[InvestigationWorkflowState]:
         """Get investigation state by case ID."""
         return self._states.get(case_id)
     
-    def set_state(self, state: InvestigationState) -> None:
+    def set_state(self, state: InvestigationWorkflowState) -> None:
         """Set investigation state."""
         self._states[state.case_id] = state
     
-    def update_state(self, case_id: str, **updates) -> Optional[InvestigationState]:
+    def update_state(self, case_id: str, **updates) -> Optional[InvestigationWorkflowState]:
         """Update investigation state with new values."""
         current_state = self.get_state(case_id)
         if current_state:
-            updated_state = current_state.copy(update=updates)
+            updated_state = current_state.model_copy(update=updates)
             self.set_state(updated_state)
             return updated_state
         return None
@@ -38,7 +38,7 @@ class StateManager:
             return True
         return False
     
-    def list_states(self) -> List[InvestigationState]:
+    def list_states(self) -> List[InvestigationWorkflowState]:
         """List all investigation states."""
         return list(self._states.values())
     
@@ -57,16 +57,16 @@ class StateManager:
 state_manager = StateManager()
 
 
-def get_investigation_state(case_id: str) -> Optional[InvestigationState]:
+def get_investigation_state(case_id: str) -> Optional[InvestigationWorkflowState]:
     """Get investigation state."""
     return state_manager.get_state(case_id)
 
 
 def create_investigation_state(case_id: str, case_type: str, title: str,
                              description: str, priority: TriagePriority,
-                             correlation_id: str) -> InvestigationState:
+                             correlation_id: str) -> InvestigationWorkflowState:
     """Create new investigation state."""
-    state = InvestigationState.create_initial(
+    state = InvestigationWorkflowState.create_initial(
         case_id=case_id,
         case_type=case_type,
         title=title,
@@ -78,6 +78,6 @@ def create_investigation_state(case_id: str, case_type: str, title: str,
     return state
 
 
-def update_investigation_state(case_id: str, **updates) -> Optional[InvestigationState]:
+def update_investigation_state(case_id: str, **updates) -> Optional[InvestigationWorkflowState]:
     """Update investigation state."""
     return state_manager.update_state(case_id, **updates)

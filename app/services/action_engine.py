@@ -1,4 +1,4 @@
-"""Action engine for fraud investigation resolution actions - Clean Architecture Implementation."""
+"""Resolution actions (freeze, reverse, notify, etc.)."""
 
 from typing import Dict, Any, List, Optional
 import logging

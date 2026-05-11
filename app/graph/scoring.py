@@ -1,4 +1,4 @@
-"""Hybrid risk scoring system - Clean Architecture Implementation."""
+"""Hybrid rule + AI risk scoring."""
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
