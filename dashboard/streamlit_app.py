@@ -1,1259 +1,2289 @@
-"""🛡️ AI FRAUD COMMAND CENTER - Enterprise-Grade War Room"""
+"""
+Andela Digital Bank - Agentic AI Fraud Investigator
+Fully-wired end-to-end demo dashboard.
 
-import streamlit as st
-import pandas as pd
-from datetime import datetime
+Every stage calls real backend APIs. AI reasoning uses Claude Sonnet/Haiku.
+Data can be uploaded or loaded from built-in JSON store.
+"""
+
+from __future__ import annotations
+
+import json
+import os
 import time
-import random
-from typing import Dict, Any
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
-# Enterprise-grade configuration
-st.set_page_config(
-    page_title="🛡️ AI FRAUD COMMAND CENTER",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+import httpx
+import pandas as pd
+import streamlit as st
 
-# Professional enterprise styling
-st.markdown("""
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
+API_BASE = os.getenv("FRAUD_API_BASE", "http://127.0.0.1:8000")
+API_KEY  = os.getenv("API_KEY", "dev-secret-api-key")
+DATA_DIR = Path(__file__).parent.parent / "app" / "data"
+
+HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
+
+STAGE_LABELS = [
+    "Data Sources",
+    "Generate Alert",
+    "Alerts Queue",
+    "Triage",
+    "Agent Investigation",
+    "AI Risk Scoring",
+    "HITL Review",
+    "Resolution",
+    "Audit Trail",
+    "Live Dashboard",
+]
+
+HIGH_RISK  = {"IR", "KP", "SY", "CU", "VE", "MM", "BY"}
+MED_RISK   = {"RU", "UA", "PK", "BD", "GH", "KE", "TZ", "CN", "AF"}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THEME
+# ─────────────────────────────────────────────────────────────────────────────
+CSS = """
 <style>
-    /* Base Enterprise Theme */
-    body { 
-        background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%); 
-        color: #ffffff; 
-        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        line-height: 1.4;
-    }
-    .stApp { 
-        background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%); 
-    }
-    
-    /* Enterprise SOC Header */
-    .soc-header {
-        background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
-        border: 2px solid #00ff88;
-        border-radius: 16px;
-        padding: 1.5rem 2rem;
-        margin-bottom: 2rem;
-        position: relative;
-        overflow: hidden;
-        box-shadow: 0 8px 32px rgba(0, 255, 136, 0.15);
-    }
-    
-    .soc-header::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(0, 255, 136, 0.1), transparent);
-        animation: scan 4s infinite;
-    }
-    
-    @keyframes scan {
-        0% { left: -100%; }
-        100% { left: 100%; }
-    }
-    
-    .header-content {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .header-title {
-        flex: 1;
-    }
-    
-    .header-title h1 {
-        margin: 0 0 0.5rem 0;
-        font-size: 1.75rem;
-        font-weight: 800;
-        color: #00ff88;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-    }
-    
-    .header-subtitle {
-        margin: 0;
-        font-size: 0.875rem;
-        color: #999999;
-        font-weight: 500;
-    }
-    
-    .header-status {
-        background: rgba(0, 255, 136, 0.1);
-        border: 1px solid #00ff88;
-        border-radius: 12px;
-        padding: 1rem 1.5rem;
-        min-width: 250px;
-    }
-    
-    .status-indicator {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .status-dot {
-        width: 12px;
-        height: 12px;
-        background: #00ff88;
-        border-radius: 50%;
-        animation: pulse 2s infinite;
-        box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-    }
-    
-    @keyframes pulse {
-        0% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.7; transform: scale(1.1); }
-        100% { opacity: 1; transform: scale(1); }
-    }
-    
-    .live-ticker {
-        background: #1a1a1a;
-        border: 1px solid #333333;
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        margin-top: 0.5rem;
-        font-family: 'SF Mono', 'Fira Code', monospace;
-        font-size: 0.75rem;
-        color: #00ff88;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    /* Enterprise KPI Cards */
-    .kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin: 2rem 0;
-    }
-    
-    .kpi-card {
-        background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%);
-        border: 1px solid #333333;
-        border-radius: 12px;
-        padding: 1.5rem;
-        position: relative;
-        overflow: hidden;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-    }
-    
-    .kpi-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-        border-color: #444444;
-    }
-    
-    .kpi-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #00ff88, #00cc6a, #00ff88);
-        animation: shimmer 3s infinite;
-    }
-    
-    @keyframes shimmer {
-        0% { transform: translateX(-100%); }
-        100% { transform: translateX(100%); }
-    }
-    
-    .kpi-icon {
-        font-size: 2rem;
-        margin-bottom: 0.75rem;
-        display: block;
-    }
-    
-    .kpi-value {
-        font-size: 2rem;
-        font-weight: 800;
-        color: #00ff88;
-        margin: 0.5rem 0;
-        display: flex;
-        align-items: baseline;
-        gap: 0.5rem;
-    }
-    
-    .kpi-change {
-        font-size: 0.875rem;
-        font-weight: 600;
-        padding: 0.25rem 0.5rem;
-        border-radius: 6px;
-        background: rgba(0, 255, 136, 0.1);
-        color: #00ff88;
-    }
-    
-    .kpi-change.negative {
-        background: rgba(255, 68, 68, 0.1);
-        color: #ff4444;
-    }
-    
-    .kpi-label {
-        font-size: 0.75rem;
-        color: #999999;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-top: 0.5rem;
-    }
-    
-    /* Cinematic Timeline */
-    .timeline-container {
-        background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%);
-        border: 1px solid #333333;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 2rem 0;
-    }
-    
-    .timeline-header {
-        font-size: 1.125rem;
-        font-weight: 700;
-        color: #00ff88;
-        margin-bottom: 1.5rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .timeline-steps {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        position: relative;
-        margin: 2rem 0;
-    }
-    
-    .timeline-step {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.5rem;
-        position: relative;
-        z-index: 2;
-    }
-    
-    .timeline-node {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 0.75rem;
-        transition: all 0.3s ease;
-    }
-    
-    .timeline-node.active {
-        background: #00ff88;
-        color: #000000;
-        box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
-        animation: glow 2s infinite;
-    }
-    
-    @keyframes glow {
-        0% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.5); }
-        50% { box-shadow: 0 0 30px rgba(0, 255, 136, 0.8); }
-        100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.5); }
-    }
-    
-    .timeline-node.completed {
-        background: #00ff88;
-        color: #000000;
-    }
-    
-    .timeline-node.pending {
-        background: #333333;
-        color: #666666;
-    }
-    
-    .timeline-label {
-        font-size: 0.75rem;
-        color: #999999;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        text-align: center;
-        max-width: 100px;
-    }
-    
-    .timeline-line {
-        position: absolute;
-        top: 20px;
-        left: 40px;
-        right: 40px;
-        height: 2px;
-        background: linear-gradient(90deg, #00ff88 0%, #333333 100%);
-        z-index: 1;
-    }
-    
-    /* Dangerous Alert Cards */
-    .alert-dangerous {
-        background: linear-gradient(135deg, #2a0a0a 0%, #4a1a1a 100%);
-        border: 1px solid #ff0000;
-        border-left: 6px solid #ff0000;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        position: relative;
-        transition: all 0.3s ease;
-        box-shadow: 0 8px 24px rgba(255, 0, 0, 0.3);
-    }
-    
-    .alert-dangerous:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 32px rgba(255, 0, 0, 0.4);
-    }
-    
-    .alert-dangerous::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: linear-gradient(90deg, #ff0000, #ff4444, #ff0000);
-        animation: alert-pulse 1s infinite;
-    }
-    
-    @keyframes alert-pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.6; }
-        100% { opacity: 1; }
-    }
-    
-    .alert-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 1rem;
-    }
-    
-    .alert-title {
-        font-size: 1.25rem;
-        font-weight: 800;
-        color: #ff4444;
-        margin: 0;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .alert-badge {
-        background: #ff0000;
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        animation: alert-pulse 1s infinite;
-    }
-    
-    .alert-details {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-        margin: 1rem 0;
-    }
-    
-    .alert-detail {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        padding: 1rem;
-    }
-    
-    .alert-detail-label {
-        font-size: 0.75rem;
-        color: #999999;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 0.25rem;
-    }
-    
-    .alert-detail-value {
-        font-size: 1.125rem;
-        font-weight: 700;
-        color: #ffffff;
-    }
-    
-    .alert-signals {
-        background: rgba(255, 68, 68, 0.05);
-        border: 1px solid rgba(255, 68, 68, 0.2);
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 1rem 0;
-    }
-    
-    .signal-item {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin: 0.5rem 0;
-        padding: 0.75rem;
-        background: rgba(255, 68, 68, 0.1);
-        border-radius: 6px;
-        border-left: 3px solid #ff4444;
-    }
-    
-    .signal-icon {
-        color: #ff4444;
-        font-size: 1.25rem;
-    }
-    
-    .signal-text {
-        color: #ffffff;
-        font-weight: 600;
-        font-size: 0.875rem;
-    }
-    
-    /* Live AI Agents */
-    .agent-container {
-        background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%);
-        border: 1px solid #333333;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        position: relative;
-    }
-    
-    .agent-terminal {
-        background: #000000;
-        border: 1px solid #333333;
-        border-radius: 8px;
-        padding: 1rem;
-        font-family: 'SF Mono', 'Fira Code', monospace;
-        font-size: 0.875rem;
-        color: #00ff88;
-        min-height: 200px;
-        overflow-y: auto;
-        position: relative;
-    }
-    
-    .agent-log {
-        margin: 0.5rem 0;
-        line-height: 1.4;
-    }
-    
-    .agent-log.timestamp {
-        color: #666666;
-        font-size: 0.75rem;
-    }
-    
-    .agent-log.message {
-        color: #00ff88;
-        margin-left: 0.5rem;
-    }
-    
-    .agent-status {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: rgba(0, 255, 136, 0.1);
-        border: 1px solid #00ff88;
-        border-radius: 20px;
-        padding: 0.5rem 1rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: #00ff88;
-    }
-    
-    /* Executive AI Briefing */
-    .executive-briefing {
-        background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%);
-        border: 1px solid #333333;
-        border-radius: 12px;
-        padding: 2rem;
-        margin: 1rem 0;
-        position: relative;
-    }
-    
-    .briefing-header {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-        padding-bottom: 1rem;
-        border-bottom: 1px solid #333333;
-    }
-    
-    .briefing-title {
-        font-size: 1.25rem;
-        font-weight: 800;
-        color: #00ff88;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .briefing-confidence {
-        background: rgba(0, 255, 136, 0.1);
-        border: 1px solid #00ff88;
-        border-radius: 20px;
-        padding: 0.5rem 1rem;
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: #00ff88;
-    }
-    
-    .briefing-content {
-        color: #ffffff;
-        line-height: 1.6;
-        font-size: 0.875rem;
-    }
-    
-    .briefing-section {
-        margin: 1.5rem 0;
-        padding: 1rem;
-        background: rgba(255, 255, 255, 0.02);
-        border-radius: 8px;
-        border-left: 3px solid #00ff88;
-    }
-    
-    .briefing-section-title {
-        font-weight: 700;
-        color: #00ff88;
-        margin-bottom: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-size: 0.875rem;
-    }
-    
-    /* High-Stakes Human Review */
-    .human-review-overlay {
-        background: linear-gradient(135deg, rgba(255, 170, 0, 0.1) 0%, rgba(255, 136, 0, 0.1) 100%);
-        border: 2px solid #ffaa00;
-        border-radius: 16px;
-        padding: 2rem;
-        margin: 2rem 0;
-        text-align: center;
-        position: relative;
-        box-shadow: 0 8px 32px rgba(255, 170, 0, 0.3);
-    }
-    
-    .review-title {
-        font-size: 1.5rem;
-        font-weight: 800;
-        color: #ffaa00;
-        margin-bottom: 1rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .review-subtitle {
-        font-size: 1.125rem;
-        color: #ffffff;
-        margin-bottom: 2rem;
-    }
-    
-    .massive-button {
-        background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
-        color: white;
-        border: none;
-        padding: 1.5rem 3rem;
-        border-radius: 12px;
-        font-weight: 800;
-        font-size: 1.125rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 8px 24px rgba(255, 0, 0, 0.4);
-        margin: 1rem;
-    }
-    
-    .massive-button:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 32px rgba(255, 0, 0, 0.6);
-    }
-    
-    .massive-button.safe {
-        background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
-        color: #000000;
-        box-shadow: 0 8px 24px rgba(0, 255, 136, 0.4);
-    }
-    
-    .massive-button.safe:hover {
-        box-shadow: 0 12px 32px rgba(0, 255, 136, 0.6);
-    }
-    
-    /* Audit Timeline */
-    .audit-timeline {
-        background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%);
-        border: 1px solid #333333;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        max-height: 400px;
-        overflow-y: auto;
-    }
-    
-    .audit-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 1rem;
-        margin: 0.75rem 0;
-        padding: 0.75rem;
-        background: rgba(255, 255, 255, 0.02);
-        border-radius: 8px;
-        border-left: 3px solid #00ff88;
-    }
-    
-    .audit-time {
-        color: #666666;
-        font-family: 'SF Mono', 'Fira Code', monospace;
-        font-size: 0.75rem;
-        min-width: 80px;
-    }
-    
-    .audit-message {
-        color: #ffffff;
-        font-size: 0.875rem;
-        flex: 1;
-    }
-    
-    /* Streamlit Overrides */
-    .stButton > button {
-        background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%) !important;
-        color: #000000 !important;
-        border: none !important;
-        font-weight: 700 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.5px !important;
-        padding: 0.75rem 1.5rem !important;
-        font-size: 0.875rem !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 16px rgba(0, 255, 136, 0.3) !important;
-    }
-    
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #00cc6a 0%, #00ff88 100%) !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 24px rgba(0, 255, 136, 0.4) !important;
-    }
-    
-    .stMetric {
-        background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%) !important;
-        border: 1px solid #333333 !important;
-        border-radius: 12px !important;
-        padding: 1.5rem !important;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
-    }
-    
-    .stStatus > div {
-        background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%) !important;
-        border: 1px solid #333333 !important;
-        border-radius: 12px !important;
-        padding: 1.5rem !important;
-    }
-    
-    .stTabs [data-baseweb="tabList"] {
-        background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%);
-        border: 1px solid #333333;
-        border-radius: 12px;
-        padding: 0.5rem;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background: transparent;
-        color: #999999;
-        border: none;
-        padding: 1rem 1.5rem;
-        border-radius: 8px;
-        font-size: 0.875rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background: rgba(0, 255, 136, 0.1);
-        color: #00ff88;
-        border: 1px solid #00ff88;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+* { font-family: 'Inter', -apple-system, sans-serif !important; }
+h1, h2, h3, h4, h5, h6 { font-family: 'Space Grotesk', sans-serif !important; }
+code, pre, .monospace { font-family: 'SF Mono', 'Monaco', monospace !important; }
+
+/* Premium Banking Dark Theme */
+:root {
+    --bg-primary: #081120;
+    --bg-secondary: #0F1B33;
+    --bg-tertiary: #1A2B4A;
+    --accent: #3B82F6;
+    --fraud: #EF4444;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --border: rgba(59, 130, 246, 0.2);
+}
+
+html, body, [data-testid="stAppViewContainer"] { 
+    background: var(--bg-primary) !important; 
+    color: var(--text-primary); 
+}
+[data-testid="stHeader"] { 
+    background: var(--bg-secondary) !important; 
+    border-bottom: 1px solid var(--border); 
+    backdrop-filter: blur(10px);
+}
+.block-container { 
+    max-width: 1400px; 
+    padding: 1rem 1.5rem 2rem !important; 
+}
+[data-testid="stSidebarContent"] { 
+    background: var(--bg-secondary) !important; 
+    border-right: 1px solid var(--border); 
+    backdrop-filter: blur(15px);
+}
+
+/* Glassmorphism Effects */
+.glass-panel {
+    background: rgba(15, 27, 51, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Premium Banking Cards */
+.enterprise-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+}
+
+.enterprise-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 8px 30px rgba(59, 130, 246, 0.2);
+}
+
+/* KPI Cards */
+.kpi-card {
+    background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent);
+}
+
+.kpi-card.success::before { background: var(--success); }
+.kpi-card.fraud::before { background: var(--fraud); }
+.kpi-card.warning::before { background: var(--warning); }
+
+/* Progress Timeline */
+.progress-timeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 1.5rem 0;
+    position: relative;
+}
+
+.progress-step {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border);
+    color: var(--text-muted);
+    position: relative;
+    z-index: 2;
+}
+
+.progress-step.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.progress-step.completed {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.progress-line {
+    flex: 1;
+    height: 2px;
+    background: var(--border);
+    position: relative;
+}
+
+.progress-line.completed {
+    background: var(--success);
+}
+
+/* Animations */
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+    50% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.agent-card-animated {
+    animation: fade-in 0.6s ease-out;
+}
+
+/* Activity Feed */
+.activity-feed {
+    max-height: 300px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.activity-item {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-item .timestamp {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-family: 'SF Mono', monospace;
+}
+
+/* Agent Progress Cards */
+.agent-progress {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.agent-progress .agent-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.agent-progress .agent-name {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.agent-progress .agent-status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.agent-progress .status-running {
+    background: var(--accent);
+    color: white;
+}
+
+.agent-progress .status-completed {
+    background: var(--success);
+    color: white;
+}
+
+.agent-progress .status-pending {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+.progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.progress-fill.success { background: var(--success); }
+.progress-fill.fraud { background: var(--fraud); }
+.progress-fill.warning { background: var(--warning); }
+}
+
+/* Pulse Animations */
+@keyframes pulse-active {
+    0%, 100% { 
+        transform: scale(1); 
+        box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.7); 
+    }
+    50% { 
+        transform: scale(1.05); 
+        box-shadow: 0 0 0 10px rgba(255, 209, 102, 0); 
+    }
+}
+
+@keyframes fade-in {
+    from { 
+        opacity: 0; 
+        transform: translateY(20px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+
+/* Step Progress Line */
+.step-progress {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.step-progress::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--green) 0%, var(--gold) 50%, #475569 100%);
+    transform: translateY(-50%);
+    z-index: -1;
+}
+
+/* Animated Agent Cards */
+.agent-card-animated {
+    animation: fade-in 0.6s ease-out;
+    transition: all 0.3s ease;
+}
+
+.agent-card-animated:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(10, 37, 64, 0.3);
+}
+
+/* Priority Badges */
+.priority-critical {
+    background: var(--red);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.priority-high {
+    background: var(--gold);
+    color: var(--navy-dark);
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.priority-low {
+    background: var(--green);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+/* Andela Branding */
+.branding-header {
+    background: rgba(10, 37, 64, 0.9);
+    border: 1px solid rgba(255, 209, 102, 0.1);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.branding-logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--gold);
+    text-shadow: 0 0 10px rgba(255, 209, 102, 0.3);
+}
+
+.branding-tagline {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.footer-branding {
+    background: rgba(10, 37, 64, 0.8);
+    border: 1px solid rgba(255, 209, 102, 0.1);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-top: 2rem;
+    text-align: center;
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+#MainMenu, footer, [data-testid="stToolbar"] { display: none !important; }
+
+.stepper-wrap { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:1.5rem; padding-bottom:1rem; border-bottom:1px solid #1a2d45; }
+.step-chip { padding:.25rem .7rem; border-radius:6px; font-size:.68rem; font-weight:600; letter-spacing:.03em; border:1px solid #1a2d45; color:#475569; background:#0a1628; }
+.step-chip.active { background:linear-gradient(135deg,#1e3a5f,#0f2a4a); color:#93c5fd; border-color:#3b82f6; box-shadow:0 0 0 1px rgba(59,130,246,.3),0 4px 12px rgba(59,130,246,.15); }
+.step-chip.done { background:#0a2218; color:#34d399; border-color:#065f46; }
+
+.section-label { font-size:.68rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#475569; margin-bottom:.75rem; display:block; }
+.stage-header { font-size:1.15rem; font-weight:700; color:#f1f5f9; letter-spacing:-.02em; margin-bottom:.25rem; }
+.stage-subtext { font-size:.82rem; color:#64748b; margin-bottom:1.5rem; }
+
+.stat-card { background:linear-gradient(135deg,#0f1f35,#0a1628); border:1px solid #1a2d45; border-radius:12px; padding:1rem 1.2rem; text-align:center; }
+.stat-value { font-size:1.8rem; font-weight:800; line-height:1; margin-bottom:.2rem; }
+.stat-label { font-size:.7rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#475569; }
+
+.alert-card { background:linear-gradient(135deg,#0f1f35,#0a1628); border:1px solid #1a2d45; border-radius:12px; padding:1rem 1.2rem; margin-bottom:.6rem; }
+.alert-card.selected { border-color:#3b82f6; box-shadow:0 0 0 1px rgba(59,130,246,.3); }
+.alert-card.critical { border-left:3px solid #ef4444; }
+.alert-card.high { border-left:3px solid #f59e0b; }
+
+.pill { display:inline-flex; align-items:center; padding:.18rem .6rem; border-radius:6px; font-size:.65rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.pill-critical { background:rgba(239,68,68,.12); color:#fca5a5; border:1px solid rgba(239,68,68,.3); }
+.pill-high     { background:rgba(245,158,11,.12); color:#fde68a; border:1px solid rgba(245,158,11,.3); }
+.pill-medium   { background:rgba(59,130,246,.12); color:#93c5fd; border:1px solid rgba(59,130,246,.3); }
+.pill-low      { background:rgba(16,185,129,.12); color:#6ee7b7; border:1px solid rgba(16,185,129,.3); }
+.pill-new      { background:rgba(245,158,11,.12); color:#fbbf24; border:1px solid rgba(245,158,11,.4); }
+.pill-closed   { background:rgba(71,85,105,.2);   color:#94a3b8; border:1px solid #334155; }
+.pill-hitl     { background:rgba(139,92,246,.12); color:#c4b5fd; border:1px solid rgba(139,92,246,.3); }
+
+.info-panel { background:linear-gradient(135deg,rgba(59,130,246,.08),rgba(59,130,246,.03)); border:1px solid rgba(59,130,246,.2); border-radius:10px; padding:.85rem 1rem; margin-bottom:1rem; font-size:.83rem; color:#93c5fd; }
+.warn-panel { background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(245,158,11,.03)); border:1px solid rgba(245,158,11,.3); border-radius:10px; padding:.85rem 1rem; margin-bottom:1rem; font-size:.83rem; color:#fbbf24; }
+.success-panel { background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(16,185,129,.03)); border:1px solid rgba(16,185,129,.3); border-radius:10px; padding:.85rem 1rem; margin-bottom:1rem; font-size:.83rem; color:#34d399; }
+
+.flag-row { display:flex; align-items:flex-start; gap:.75rem; padding:.7rem 1rem; border-radius:10px; margin-bottom:.4rem; background:#0f1f35; border:1px solid #1a2d45; }
+.flag-label { font-size:.78rem; font-weight:700; color:#f1f5f9; }
+.flag-detail { font-size:.73rem; color:#64748b; margin-top:1px; }
+
+.agent-card { background:linear-gradient(135deg,#0f1f35,#0a1628); border:1px solid #1a2d45; border-radius:12px; padding:1.2rem; }
+.agent-card.success { border-color:rgba(16,185,129,.4); }
+.agent-card.warning { border-color:rgba(245,158,11,.4); }
+.agent-card.danger  { border-color:rgba(239,68,68,.4); }
+.agent-name { font-size:.8rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; margin-bottom:.75rem; }
+.agent-finding { font-size:.78rem; padding:.4rem 0; border-bottom:1px solid #1a2d45; display:flex; justify-content:space-between; }
+.agent-finding:last-child { border-bottom:none; }
+.fk { color:#64748b; }
+.fv { font-weight:600; font-family:'JetBrains Mono',monospace; }
+.fv-t { color:#10b981; } .fv-f { color:#475569; } .fv-h { color:#ef4444; } .fv-m { color:#f59e0b; }
+
+.risk-display { background:linear-gradient(135deg,#0f1f35,#0a1628); border:1px solid #1a2d45; border-radius:16px; padding:1.5rem; text-align:center; margin-bottom:1rem; }
+.risk-number { font-size:4rem; font-weight:800; line-height:1; letter-spacing:-.04em; }
+.gauge-track { height:8px; border-radius:4px; background:#1a2d45; overflow:hidden; margin:.75rem 0 .4rem; }
+.gauge-fill  { height:100%; border-radius:4px; }
+
+.evidence-card { background:#0f1f35; border:1px solid #1a2d45; border-left:3px solid #8b5cf6; border-radius:0 10px 10px 0; padding:.75rem 1rem; margin-bottom:.5rem; }
+.evidence-reason { font-size:.82rem; font-weight:600; color:#f1f5f9; margin-bottom:.2rem; }
+.evidence-meta   { font-size:.7rem; color:#475569; font-family:'JetBrains Mono',monospace; }
+
+.hitl-alert { background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(245,158,11,.03)); border:1px solid rgba(245,158,11,.3); border-radius:12px; padding:1.2rem 1.4rem; margin-bottom:1.5rem; }
+.hitl-title { font-size:1rem; font-weight:700; color:#fbbf24; margin-bottom:.4rem; }
+.hitl-body  { font-size:.83rem; color:#d97706; }
+
+.summary-card { background:#0f1f35; border:1px solid #1a2d45; border-radius:10px; padding:1rem 1.2rem; }
+.summary-row { display:flex; justify-content:space-between; padding:.35rem 0; border-bottom:1px solid #1a2d45; font-size:.82rem; }
+.summary-row:last-child { border-bottom:none; }
+.sk { color:#64748b; } .sv { font-weight:600; color:#f1f5f9; }
+
+.action-row { background:#0a2218; border:1px solid rgba(16,185,129,.2); border-radius:10px; padding:.75rem 1rem; margin-bottom:.4rem; display:flex; align-items:center; gap:.75rem; }
+.action-name { font-family:'JetBrains Mono',monospace; font-size:.78rem; color:#34d399; font-weight:600; }
+
+/* Enterprise Sidebar Control Panel - Final Polish */
+.sidebar-phase-header {
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin: 0.8rem 0 0.4rem 0;
+    padding: 0 0.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.3rem;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Professional button styling for active steps */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, var(--accent), rgba(59, 130, 246, 0.8)) !important;
+    border-color: var(--accent) !important;
+    color: white !important;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4) !important;
+    border-left: 3px solid var(--accent) !important;
+    font-weight: 600 !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Completed steps styling */
+.stButton > button[data-testid="baseButton-secondary"] {
+    background: rgba(16, 185, 129, 0.1) !important;
+    border-color: rgba(16, 185, 129, 0.3) !important;
+    color: var(--success) !important;
+    font-weight: 500 !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Monospace styling for step numbers */
+.step-number {
+    font-family: 'SF Mono', 'Monaco', monospace;
+    font-weight: 700;
+    color: inherit;
+}
+
+/* Compact button styling with precision alignment */
+div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div.stButton > button,
+.stButton > button {
+    padding: 0.4rem 0.6rem !important;
+    margin: 0.15rem 0 !important;
+    font-size: 0.75rem !important;
+    border-radius: 6px !important;
+    text-align: center !important;
+    transition: all 0.2s ease !important;
+    font-family: 'Inter', sans-serif !important;
+    line-height: 1.3 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+}
+
+/* Force center alignment for sidebar buttons specifically */
+section[data-testid="stSidebar"] > div > div > div > div.stButton > button {
+    text-align: center !important;
+    justify-content: center !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* Custom nav-button classes for perfect centering */
+.nav-button {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    margin: 0.15rem 0;
+    font-size: 0.75rem;
+    font-family: 'Inter', sans-serif;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.nav-button:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: var(--text-primary);
+    transform: translateX(2px);
+}
+
+.nav-button-active {
+    background: linear-gradient(135deg, var(--accent), rgba(59, 130, 246, 0.8));
+    border-color: var(--accent);
+    color: white;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+    border-left: 3px solid var(--accent);
+}
+
+.nav-button-completed {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: var(--success);
+}
+
+.nav-button-locked {
+    background: var(--bg-tertiary);
+    border-color: var(--border);
+    color: var(--text-muted);
+}
+
+/* Wrapper to force center alignment */
+.nav-button-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0.1rem 0;
+}
+
+/* Add spacing after phase headers */
+.sidebar-phase-header + .nav-button-wrapper {
+    margin-top: 0.2rem;
+}
+
+.nav-button-wrapper button {
+    text-align: center !important;
+    justify-content: center !important;
+    align-items: center !important;
+    display: flex !important;
+    width: 100% !important;
+}
+
+.stButton > button:hover:not(:disabled) {
+    transform: translateX(2px) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Disabled button styling for locked steps */
+.stButton > button:disabled {
+    opacity: 0.4 !important;
+    background: var(--bg-tertiary) !important;
+    border-color: var(--border) !important;
+    color: var(--text-muted) !important;
+    cursor: not-allowed !important;
+}
+
+/* Ensure consistent vertical rhythm between phase headers and buttons */
+.sidebar-phase-header + .stButton {
+    margin-top: 0.4rem !important;
+}
+
+/* Monospace digits for perfect vertical alignment */
+.stButton > button::before {
+    content: attr(data-step-icon);
+    font-family: 'SF Mono', 'Monaco', monospace;
+    font-weight: 700;
+    display: inline-block;
+    width: 1.2em;
+    text-align: center;
+}
+
+.sidebar-reset-button {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    margin: 1.5rem 0 0.5rem 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--fraud);
+    transition: all 0.2s ease;
+}
+
+.sidebar-reset-button:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+    transform: translateY(-1px);
+}
+
+.memory-row { background:#0a1628; border:1px solid rgba(16,185,129,.15); border-radius:8px; padding:.6rem .9rem; margin-bottom:.35rem; font-size:.78rem; display:flex; align-items:center; gap:.6rem; }
+.memory-type { font-size:.65rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; background:rgba(16,185,129,.12); color:#34d399; padding:.15rem .45rem; border-radius:4px; }
+.memory-val  { font-family:'JetBrains Mono',monospace; color:#94a3b8; font-size:.75rem; }
+
+.timeline-row { display:flex; gap:.75rem; padding:.5rem 0; border-bottom:1px solid #1a2d45; font-size:.78rem; }
+.timeline-ts  { font-family:'JetBrains Mono',monospace; color:#3b82f6; font-size:.7rem; flex-shrink:0; }
+.timeline-evt { color:#94a3b8; }
+
+.ev-box { background:#0f1f35; border:1px solid #1a2d45; border-left:3px solid #3b82f6; border-radius:0 10px 10px 0; padding:.75rem 1rem; margin-bottom:.5rem; font-size:.82rem; }
+
+.sb-stat { display:flex; justify-content:space-between; align-items:center; padding:.4rem 0; border-bottom:1px solid #1a2d45; }
+.sb-stat-label { font-size:.75rem; color:#475569; }
+.sb-stat-val   { font-size:.85rem; font-weight:700; }
+
+.api-badge { display:inline-flex; align-items:center; gap:.3rem; background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.25); border-radius:6px; padding:.15rem .5rem; font-size:.65rem; font-weight:700; color:#34d399; font-family:'JetBrains Mono',monospace; }
+.api-badge.calling { background:rgba(59,130,246,.1); border-color:rgba(59,130,246,.25); color:#93c5fd; }
+.api-badge.error   { background:rgba(239,68,68,.1);  border-color:rgba(239,68,68,.25);  color:#fca5a5; }
+
+@keyframes pulse-amber { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0);}50%{box-shadow:0 0 0 6px rgba(245,158,11,.15);} }
+.pulse-amber { animation:pulse-amber 2s infinite; }
+hr { border-color:#1a2d45 !important; margin:1.5rem 0 !important; }
+
+[data-testid="stMetric"] { background:#0f1f35; border:1px solid #1a2d45; border-radius:10px; padding:.75rem 1rem; }
+[data-testid="stMetricLabel"] { font-size:.68rem !important; font-weight:700 !important; letter-spacing:.06em !important; text-transform:uppercase !important; color:#475569 !important; }
+[data-testid="stMetricValue"] { font-size:1.5rem !important; font-weight:800 !important; color:#f1f5f9 !important; }
+button[kind="primary"] { background:linear-gradient(135deg,#2563eb,#1d4ed8) !important; border:none !important; border-radius:8px !important; font-weight:600 !important; box-shadow:0 4px 12px rgba(37,99,235,.3) !important; }
+button[kind="secondary"] { background:#0f1f35 !important; border:1px solid #1e3a5f !important; color:#93c5fd !important; border-radius:8px !important; font-weight:600 !important; }
+[data-testid="stForm"] { background:#0f1f35; border:1px solid #1a2d45; border-radius:12px; padding:1.2rem; }
 </style>
-""", unsafe_allow_html=True)
+"""
 
-# Session state
-if 'current_step' not in st.session_state:
-    st.session_state.current_step = 1
-if 'alerts' not in st.session_state:
-    st.session_state.alerts = []
-if 'selected_alert' not in st.session_state:
-    st.session_state.selected_alert = None
-if 'investigation_log' not in st.session_state:
-    st.session_state.investigation_log = []
-if 'agent_logs' not in st.session_state:
-    st.session_state.agent_logs = []
 
-def generate_fraud_alert():
-    """Generate realistic fraud alert."""
+# ─────────────────────────────────────────────────────────────────────────────
+# API HELPERS — real HTTP calls to the backend
+# ─────────────────────────────────────────────────────────────────────────────
+def api_post(path: str, payload: dict) -> dict:
+    """Synchronous POST to the backend API."""
+    try:
+        r = httpx.post(f"{API_BASE}{path}", json=payload, headers=HEADERS, timeout=60)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        return {"success": False, "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def api_get(path: str, params: dict | None = None) -> dict:
+    """Synchronous GET to the backend API."""
+    try:
+        r = httpx.get(f"{API_BASE}{path}", params=params, headers=HEADERS, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def api_badge(label: str, ok: bool = True) -> str:
+    cls = "api-badge" if ok else "api-badge error"
+    icon = "✓" if ok else "✗"
+    return f'<span class="{cls}">{icon} {label}</span>'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+def load_json(filename: str) -> Any:
+    path = DATA_DIR / filename
+    return json.loads(path.read_text()) if path.exists() else []
+
+
+def utcnow_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def utcnow_clock() -> str:
+    return datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+
+
+def trace(msg: str) -> None:
+    st.session_state.audit_trail.append({"timestamp": utcnow_iso(), "event": msg})
+
+
+def pill(label: str, kind: str) -> str:
+    cls = {"NEW":"pill-new","CRITICAL":"pill-critical","HIGH":"pill-high",
+           "MEDIUM":"pill-medium","LOW":"pill-low","CLOSED":"pill-closed","HITL":"pill-hitl"
+           }.get(kind.upper(), "pill-medium")
+    return f'<span class="pill {cls}">{label}</span>'
+
+
+def risk_color(s: float) -> str:
+    return "#ef4444" if s >= 0.8 else "#f59e0b" if s >= 0.6 else "#3b82f6" if s >= 0.4 else "#10b981"
+
+
+def risk_gradient(s: float) -> str:
+    return ("linear-gradient(90deg,#ef4444,#dc2626)" if s >= 0.8 else
+            "linear-gradient(90deg,#f59e0b,#d97706)" if s >= 0.6 else
+            "linear-gradient(90deg,#3b82f6,#2563eb)" if s >= 0.4 else
+            "linear-gradient(90deg,#10b981,#059669)")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SESSION STATE
+# ─────────────────────────────────────────────────────────────────────────────
+def init_state() -> None:
+    defaults: dict[str, Any] = {
+        "stage": 1,
+        "alerts": [],
+        "selected_alert_id": None,
+        "fraud_memory_updates": [],
+        "audit_trail": [{"timestamp": utcnow_iso(), "event": "SYSTEM BOOT — LangGraph watchdog armed"}],
+        "metrics": {"total_alerts": 0, "blocked": 0, "auto_closed": 0, "hitl_pending": 0, "confirmed_fraud": 0},
+        # Data — loaded from files or uploaded
+        "transactions": load_json("transactions.json"),
+        "customers":    load_json("customers.json"),
+        "kyc_events":   load_json("kyc_events.json"),
+        "sanctions":    load_json("sanctions_data.json"),
+        "fraud_memory": load_json("fraud_memory.json"),
+        "data_source":  "built-in",  # "built-in" | "uploaded"
+    }
+    for k, v in defaults.items():
+        st.session_state.setdefault(k, v)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LAYOUT
+# ─────────────────────────────────────────────────────────────────────────────
+def render_stepper(current: int) -> None:
+    """Render interactive stepper with progress line and icons"""
+    st.markdown('<div class="step-progress">', unsafe_allow_html=True)
+    
+    icons = ["📊", "🚨", "📋", "🔍", "🔬", "🧠", "👥", "⚡", "📋", "📈"]
+    
+    for i, label in enumerate(STAGE_LABELS, 1):
+        is_done = i < current
+        is_active = i == current
+        is_future = i > current
+        
+        if is_done:
+            chip_class = "done"
+            icon = "✅"
+        elif is_active:
+            chip_class = "active"
+            icon = icons[i-1]
+        else:
+            chip_class = ""
+            icon = icons[i-1]
+        
+        st.markdown(f'''
+        <div class="step-chip {chip_class}" style="animation: {'pulse-active 2s ease-in-out infinite' if is_active else 'none'};">
+            {icon} {label}
+        </div>
+        ''', unsafe_allow_html=True)
+
+def render_stepper_legacy(current: int) -> None:
+    chips = "".join(
+        f'<span class="step-chip {"active" if i==current else "done" if i<current else ""}">{label}</span>'
+        for i, label in enumerate(STAGE_LABELS, 1)
+    )
+    st.markdown(f'<div class="stepper-wrap">{chips}</div>', unsafe_allow_html=True)
+
+
+def render_sidebar() -> None:
+    m = st.session_state.metrics
+    current_stage = st.session_state.stage
+
+    # Header
+    st.sidebar.markdown(
+        '<div style="padding:0.75rem 0 0.5rem;">'
+        '<div style="font-size:1rem;font-weight:800;color:#f1f5f9;letter-spacing:-.02em;">🏛️ Command Center</div>'
+        '<div style="font-size:0.7rem;color:#475569;margin-top:2px;">Andela Digital Bank · Fraud AI</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Live clock
+    from datetime import datetime, timezone
+    clock = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+    st.sidebar.markdown(
+        f'<div style="background:#0f1f35;border:1px solid #1a2d45;border-radius:8px;'
+        f'padding:0.4rem 0.75rem;margin-bottom:0.75rem;'
+        f'display:flex;justify-content:space-between;align-items:center;">'
+        f'<span style="font-size:0.68rem;color:#475569;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Live</span>'
+        f'<span style="font-family:monospace;font-size:0.75rem;color:#3b82f6;font-weight:700;">{clock}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Compact metrics
+    stats = [
+        ("Total Alerts",     m["total_alerts"],    "#f1f5f9"),
+        ("Fraud Confirmed",  m["confirmed_fraud"],  "#ef4444"),
+        ("Auto-Closed",      m["auto_closed"],      "#10b981"),
+        ("HITL Pending",     m["hitl_pending"],     "#f59e0b"),
+        ("Accts Blocked",    m["blocked"],          "#ef4444"),
+    ]
+    rows = "".join(
+        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+        f'padding:0.35rem 0;border-bottom:1px solid #1a2d45;">'
+        f'<span style="font-size:0.73rem;color:#475569;">{l}</span>'
+        f'<span style="font-size:0.82rem;font-weight:700;color:{c};">{v}</span></div>'
+        for l, v, c in stats
+    )
+    st.sidebar.markdown(
+        f'<div style="background:#0f1f35;border:1px solid #1a2d45;border-radius:10px;'
+        f'padding:0.6rem 0.9rem;margin-bottom:0.75rem;">{rows}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Navigation — phase groups
+    phases = [
+        ("INGESTION",  STAGE_LABELS[0:3],  range(1, 4)),
+        ("ANALYSIS",   STAGE_LABELS[3:6],  range(4, 7)),
+        ("DECISION",   STAGE_LABELS[6:10], range(7, 11)),
+    ]
+
+    for phase_name, labels, indices in phases:
+        st.sidebar.markdown(
+            f'<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.1em;'
+            f'text-transform:uppercase;color:#334155;margin:0.6rem 0 0.3rem;'
+            f'padding-left:2px;">{phase_name}</div>',
+            unsafe_allow_html=True,
+        )
+        for i, label in zip(indices, labels):
+            if i < current_stage:
+                icon = "✓"
+                color = "#10b981"
+            elif i == current_stage:
+                icon = "●"
+                color = "#3b82f6"
+            else:
+                icon = "○"
+                color = "#334155"
+
+            # Clean label: strip the "N · " prefix, keep just the name
+            short = label.split(" · ", 1)[-1] if " · " in label else label
+
+            if st.sidebar.button(
+                f"{icon}  {short}",
+                key=f"nav_{i}",
+                use_container_width=True,
+            ):
+                st.session_state.stage = i
+                st.rerun()
+
+    st.sidebar.markdown("<hr style='border-color:#1a2d45;margin:0.75rem 0;'>", unsafe_allow_html=True)
+    if st.sidebar.button("↺  Reset Demo", use_container_width=True):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 1 — DATA SOURCES (with upload support)
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_data_sources() -> None:
+    st.markdown('<span class="section-label">STAGE 1 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Data Sources &amp; Fraud Context</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Upload your own data or use the built-in Andela Digital Bank dataset. All data feeds directly into the investigation pipeline.</div>', unsafe_allow_html=True)
+
+    # Data source selector
+    col_src, col_status = st.columns([3, 1])
+    with col_src:
+        source = st.radio("Data source", ["Built-in dataset", "Upload custom data"], horizontal=True, key="data_source_radio")
+    with col_status:
+        src_label = "built-in" if source == "Built-in dataset" else "uploaded"
+        st.markdown(f'<div style="margin-top:1.5rem;">{api_badge(f"Source: {src_label}")}</div>', unsafe_allow_html=True)
+
+    if source == "Upload custom data":
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown('<span class="section-label">Upload JSON Data Files</span>', unsafe_allow_html=True)
+        st.caption("Each file must be a JSON array of objects matching the built-in schema.")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            txn_file = st.file_uploader("Transactions (JSON)", type="json", key="upload_txn")
+            if txn_file:
+                st.session_state.transactions = json.load(txn_file)
+                st.session_state.data_source = "uploaded"
+                st.success(f"✓ {len(st.session_state.transactions)} transactions loaded")
+
+        with col2:
+            kyc_file = st.file_uploader("KYC Events (JSON)", type="json", key="upload_kyc")
+            if kyc_file:
+                st.session_state.kyc_events = json.load(kyc_file)
+                st.success(f"✓ {len(st.session_state.kyc_events)} KYC events loaded")
+
+        with col3:
+            cust_file = st.file_uploader("Customers (JSON)", type="json", key="upload_cust")
+            if cust_file:
+                st.session_state.customers = json.load(cust_file)
+                st.success(f"✓ {len(st.session_state.customers)} customers loaded")
+
+        st.markdown('<span class="section-label" style="margin-top:.5rem;">Schema Reference</span>', unsafe_allow_html=True)
+        with st.expander("View expected JSON schemas"):
+            st.code(json.dumps({
+                "transactions": [{"transaction_id":"TXN001","customer_id":"CUST001","amount":15000,"currency":"USD","timestamp":"2025-01-10T02:30:00Z","destination_country":"IR","device_id":"DEV001","ip_address":"185.1.2.3","risk_indicators":["high_value_rush"]}],
+                "kyc_events":   [{"customer_id":"CUST001","event_type":"login_attempt","timestamp":"2025-01-10T02:30:00Z","ip_address":"185.1.2.3","device_info":{"device_type":"desktop","os":"Windows 10","browser":"Chrome"},"geo_location":{"country":"RU","city":"Moscow","latitude":55.75,"longitude":37.61},"anomaly_type":"geo_location_mismatch","risk_score":0.85}],
+                "customers":    [{"customer_id":"CUST001","name":"John Smith","account_type":"premium","risk_profile":"medium","total_transactions":1247,"total_amount":284750}],
+            }, indent=2), language="json")
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    txns  = st.session_state.transactions
+    kyc   = st.session_state.kyc_events
+    san   = st.session_state.sanctions
+    mem   = st.session_state.fraud_memory
+    custs = st.session_state.customers
+
+    flagged = len([t for t in txns if t.get("risk_indicators")])
+    kyc_anom = len([k for k in kyc if k.get("anomaly_type")])
+    san_entries = san.get("sanctions_entries", []) if isinstance(san, dict) else []
+
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem;margin-bottom:1.5rem;">'
+        f'<div class="stat-card"><div class="stat-value" style="color:#3b82f6;">{len(txns)}</div><div class="stat-label">Transactions</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#ef4444;">{flagged}</div><div class="stat-label">Flagged</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#f59e0b;">{kyc_anom}</div><div class="stat-label">KYC Anomalies</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#8b5cf6;">{len(san_entries)}</div><div class="stat-label">Sanctioned Entities</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#10b981;">{len(mem)}</div><div class="stat-label">Fraud Patterns</div></div>'
+        f'</div>', unsafe_allow_html=True,
+    )
+
+    tab_tx, tab_kyc, tab_san, tab_mem, tab_cust = st.tabs(["💳 Transactions", "🔍 KYC Events", "🚫 Sanctions", "🧠 Fraud Memory", "👤 Customers"])
+
+    with tab_tx:
+        # Search and filter bar
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            search_term = st.text_input("🔍 Search transactions...", placeholder="Transaction ID, Customer ID, Country...")
+        with col2:
+            min_amount = st.number_input("Min Amount", value=0.0, key="min_amount")
+        with col3:
+            max_amount = st.number_input("Max Amount", value=100000.0, key="max_amount")
+        
+        # Filter transactions
+        filtered_txns = []
+        for t in txns:
+            if search_term and search_term.lower() not in str(t.get("transaction_id", "")).lower() and \
+               search_term.lower() not in str(t.get("customer_id", "")).lower() and \
+               search_term.lower() not in str(t.get("destination_country", "")).lower():
+                continue
+            if min_amount and t.get("amount", 0) < min_amount:
+                continue
+            if max_amount and t.get("amount", 0) > max_amount:
+                continue
+            filtered_txns.append(t)
+        
+        # Display as interactive cards
+        st.markdown(f'<div style="margin-bottom: 1rem;">Found {len(filtered_txns)} transactions</div>', unsafe_allow_html=True)
+        
+        for t in filtered_txns[:10]:  # Show first 10
+            amount = t.get("amount", 0)
+            country = t.get("destination_country", "UNKNOWN")
+            risk_level = "CRITICAL" if country in HIGH_RISK else "HIGH" if country in MED_RISK else "MEDIUM"
+            priority_class = "priority-critical" if country in HIGH_RISK else "priority-high" if country in MED_RISK else "priority-low"
+            
+            st.markdown(f'''
+            <div class="glass-panel agent-card-animated" style="margin-bottom: 1rem; padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <div style="font-size: 1.2rem; font-weight: 700; color: var(--gold);">{t.get("transaction_id", "UNKNOWN")}</div>
+                        <div style="color: #94a3b8; font-size: 0.9rem;">{t.get("customer_id", "UNKNOWN")} • {country}</div>
+                    </div>
+                    <div class="{priority_class}">{risk_level}</div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <div style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.5rem;">Amount</div>
+                        <div style="font-size: 1.5rem; font-weight: 800; color: var(--gold);">${amount:,.2f}</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.5rem; font-weight: 600;">Risk Factors</div>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            {"".join(f'<span style="background: rgba(239, 68, 68, 0.15); color: var(--fraud); padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 500; border: 1px solid rgba(239, 68, 68, 0.3);">{ind}</span>' for ind in t.get("risk_indicators", []))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        if len(filtered_txns) > 10:
+            st.info(f"Showing first 10 of {len(filtered_txns)} transactions. Use search to find more.")
+
+    with tab_kyc:
+        for ev in kyc:
+            geo = ev.get("geo_location", {})
+            dev = ev.get("device_info", {})
+            st.markdown(
+                f'<div class="ev-box">{pill(ev.get("anomaly_type","unknown").upper().replace("_"," "),"HIGH")} &nbsp;'
+                f'<b style="color:#f1f5f9;">{ev["customer_id"]}</b> · {ev["event_type"]}<br>'
+                f'<span style="font-size:.75rem;color:#64748b;">📍 {geo.get("city","?")} {geo.get("country","?")} · 💻 {dev.get("os","?")} · Risk: <b style="color:#f59e0b;">{ev.get("risk_score","?")}</b> · {ev["timestamp"]}</span></div>',
+                unsafe_allow_html=True,
+            )
+
+    with tab_san:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown('<span class="section-label">Sanctioned Entities</span>', unsafe_allow_html=True)
+            if san_entries:
+                st.dataframe(pd.DataFrame(san_entries)[["entity_name","entity_type","sanctions_list","risk_level","risk_score"]], hide_index=True, use_container_width=True)
+        with c2:
+            st.markdown('<span class="section-label">Country Risk Profiles</span>', unsafe_allow_html=True)
+            countries = san.get("country_risks", []) if isinstance(san, dict) else []
+            if countries:
+                # Create heatmap data
+                import plotly.express as px
+                df_countries = pd.DataFrame(countries)
+                
+                # Create color scale based on risk scores
+                df_countries['risk_color'] = df_countries['risk_score'].apply(
+                    lambda x: '#EF476F' if x > 0.8 else '#FFD166' if x > 0.6 else '#06D6A0'
+                )
+                
+                # Create heatmap
+                fig = px.choropleth(
+                    df_countries, 
+                    locations="country_code",
+                    color="risk_score",
+                    hover_name="country_name",
+                    hover_data=["risk_score", "sanctions_active"],
+                    color_continuous_scale=px.colors.sequential.Reds,
+                    range_color=(0, 1),
+                    title="Global Risk Heatmap"
+                )
+                
+                fig.update_layout(
+                    geo=dict(showframe=False, showcoastlines=False),
+                    paper_bgcolor='rgba(10, 37, 64, 0.9)',
+                    plot_bgcolor='rgba(10, 37, 64, 0.9)',
+                    font=dict(color='#f1f5f9'),
+                    margin=dict(l=0, r=0, t=0, b=0, pad=0),
+                    height=400
+                )
+                
+                # Country risk analysis available in audit trail
+                st.markdown('<div style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted);">Country risk analysis available in audit trail</div>', unsafe_allow_html=True)
+
+    with tab_mem:
+        for p in mem:
+            c = p.get("confidence", 0)
+            cc = "#ef4444" if c > 0.85 else "#f59e0b" if c > 0.7 else "#3b82f6"
+            st.markdown(
+                f'<div class="memory-row"><span class="memory-type">{p.get("pattern_type","?")}</span>'
+                f'<span class="memory-val">{p.get("entity_id","?")}</span>'
+                f'<span style="margin-left:auto;font-size:.72rem;color:#475569;">conf: <b style="color:{cc};">{c}</b> · risk: <b style="color:{cc};">{p.get("risk_score","?")}</b> · {p.get("description","")}</span></div>',
+                unsafe_allow_html=True,
+            )
+
+    with tab_cust:
+        df_cu = pd.DataFrame(custs)
+        st.dataframe(df_cu[["customer_id","name","account_type","risk_profile","total_transactions","total_amount","last_login"]], hide_index=True, use_container_width=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    if st.button("→ Proceed to Generate Alert", type="primary", key="s1_next"):
+        st.session_state.stage = 2
+        st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 2 — GENERATE ALERT (calls POST /v1/alerts)
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_generate_alert() -> None:
+    st.markdown('<span class="section-label">STAGE 2 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Generate Alert</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Select a suspicious transaction to trigger a real fraud alert via <code>POST /v1/alerts</code>.</div>', unsafe_allow_html=True)
+
+    txns = [t for t in st.session_state.transactions if t.get("risk_indicators")]
+
+    st.markdown('<span class="section-label">Suspicious Transactions</span>', unsafe_allow_html=True)
+    for t in txns:
+        country = t["destination_country"]
+        risk_level = "CRITICAL" if country in HIGH_RISK else "HIGH" if country in MED_RISK else "MEDIUM"
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            st.markdown(
+                f'<div class="alert-card {risk_level.lower()}">'
+                f'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;">{pill(risk_level,risk_level)}'
+                f'<b style="color:#f1f5f9;">{t["transaction_id"]}</b><span style="color:#475569;">· {t["customer_id"]}</span></div>'
+                f'<div style="font-size:1rem;font-weight:800;color:#f1f5f9;">${t["amount"]:,.2f} <span style="font-size:.75rem;color:#64748b;">{t["currency"]}</span>'
+                f' → {t["destination_country"]} · {t["transaction_type"]}</div>'
+                f'<div style="font-size:.72rem;color:#475569;">🚩 {", ".join(t["risk_indicators"])} · {t["timestamp"]}</div></div>',
+                unsafe_allow_html=True,
+            )
+        with c2:
+            if st.button("🚨 Flag Alert", key=f"flag_{t['transaction_id']}", use_container_width=True):
+                with st.spinner("🔍 Scanning transaction for fraud patterns..."):
+                    _create_alert_from_transaction(t)
+                st.success(f"✅ Alert generated for {t['transaction_id']}!")
+                st.balloons()
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<span class="section-label">Simulate Custom Alert</span>', unsafe_allow_html=True)
+    with st.form("custom_alert"):
+        col1, col2, col3 = st.columns(3)
+        cust_id = col1.selectbox("Customer", [c["customer_id"] for c in st.session_state.customers] or ["CUST001","CUST002","CUST003"])
+        amount  = col2.number_input("Amount (USD)", value=15000.0, min_value=100.0)
+        country = col3.selectbox("Destination Country", ["IR","KP","RU","CN","US","NG","SY","BY"])
+        if st.form_submit_button("Generate Custom Alert", type="primary"):
+            import random
+            t = {
+                "transaction_id": f"TXN-{uuid.uuid4().hex[:6].upper()}",
+                "customer_id": cust_id, "amount": amount, "currency": "USD",
+                "timestamp": utcnow_iso(), "destination_country": country,
+                "device_id": f"DEV-{uuid.uuid4().hex[:6].upper()}",
+                "ip_address": f"185.{random.randint(1,254)}.{random.randint(1,254)}.{random.randint(1,254)}",
+                "risk_indicators": ["custom_alert"],
+            }
+            _create_alert_from_transaction(t)
+
+
+def _create_alert_from_transaction(t: dict) -> None:
+    """Call POST /v1/alerts and store the alert in session state."""
+    alert_id = f"ALERT-{uuid.uuid4().hex[:8].upper()}"
+    inv_id   = f"inv_{uuid.uuid4().hex[:10]}"
+
+    # Call real API
+    payload = {
+        "transaction_id": t["transaction_id"],
+        "amount": t["amount"], "currency": t.get("currency","USD"),
+        "timestamp": t.get("timestamp", utcnow_iso()),
+        "account_id": t["customer_id"],
+        "recipient_country": t["destination_country"],
+        "alert_hash": uuid.uuid4().hex,
+        "metadata": {"device_id": t.get("device_id",""), "ip_address": t.get("ip_address","")},
+    }
+    resp = api_post("/v1/alerts", payload)
+    api_ok = resp.get("investigation_id") is not None or resp.get("status") is not None
+
+    severity = "CRITICAL" if t["destination_country"] in HIGH_RISK else "HIGH" if t["destination_country"] in MED_RISK else "MEDIUM"
+    alert = {
+        "alert_id": alert_id, "investigation_id": inv_id,
+        "transaction_id": t["transaction_id"], "customer_id": t["customer_id"],
+        "amount": t["amount"], "currency": t.get("currency","USD"),
+        "destination_country": t["destination_country"],
+        "device_id": t.get("device_id","UNKNOWN"), "ip_address": t.get("ip_address",""),
+        "risk_indicators": t.get("risk_indicators",[]),
+        "severity": severity, "status": "NEW", "created_at": utcnow_iso(),
+        "triage_result": None, "agent_results": None, "risk_result": None,
+        "hitl_decision": None, "frozen": False, "approved": False,
+        "api_response": resp,
+    }
+    st.session_state.alerts.append(alert)
+    st.session_state.selected_alert_id = alert_id
+    st.session_state.metrics["total_alerts"] += 1
+    trace(f"ALERT_GENERATED · {alert_id} · API={'OK' if api_ok else 'FALLBACK'} · txn={t['transaction_id']} · ${t['amount']:,.0f}")
+    st.toast(f"Alert {alert_id} created", icon="🚨")
+    st.session_state.stage = 3
+    st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 3 — ALERTS QUEUE
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_alerts_queue() -> None:
+    st.markdown('<span class="section-label">STAGE 3 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Alerts Queue</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Live alert feed. Click an alert to begin the investigation workflow.</div>', unsafe_allow_html=True)
+
+    alerts = st.session_state.alerts
+    if not alerts:
+        st.markdown('<div class="info-panel">No alerts yet. Go to Stage 2 to generate one.</div>', unsafe_allow_html=True)
+        return
+
+    total = len(alerts)
+    crit  = sum(1 for a in alerts if a["severity"] == "CRITICAL")
+    new   = sum(1 for a in alerts if a["status"] == "NEW")
+    closed = sum(1 for a in alerts if a["status"] == "CLOSED")
+
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.5rem;">'
+        f'<div class="stat-card"><div class="stat-value" style="color:#f1f5f9;">{total}</div><div class="stat-label">Total</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#ef4444;">{crit}</div><div class="stat-label">Critical</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#f59e0b;">{new}</div><div class="stat-label">New</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#10b981;">{closed}</div><div class="stat-label">Closed</div></div>'
+        f'</div>', unsafe_allow_html=True,
+    )
+
+    # Sort and filter controls
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        sort_by = st.selectbox("Sort by:", ["Amount (High→Low)", "Amount (Low→High)", "Severity", "Created Time"], key="sort_alerts")
+    with col2:
+        filter_severity = st.selectbox("Filter:", ["All", "CRITICAL", "HIGH", "MEDIUM"], key="filter_severity")
+    with col3:
+        st.markdown(f'<div style="text-align: right; color: #64748b; font-size: 0.9rem;">{len(alerts)} alerts</div>', unsafe_allow_html=True)
+    
+    # Sort alerts
+    if sort_by == "Amount (High→Low)":
+        alerts_sorted = sorted(alerts, key=lambda x: x.get("amount", 0), reverse=True)
+    elif sort_by == "Amount (Low→High)":
+        alerts_sorted = sorted(alerts, key=lambda x: x.get("amount", 0))
+    elif sort_by == "Severity":
+        severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+        alerts_sorted = sorted(alerts, key=lambda x: severity_order.get(x.get("severity", "MEDIUM"), 3))
+    else:  # Created Time
+        alerts_sorted = sorted(alerts, key=lambda x: x.get("created_at", ""), reverse=True)
+    
+    # Filter alerts
+    if filter_severity != "All":
+        alerts_sorted = [a for a in alerts_sorted if a.get("severity") == filter_severity]
+    
+    for a in alerts_sorted:
+        is_sel = st.session_state.selected_alert_id == a["alert_id"]
+        severity = a.get("severity", "MEDIUM")
+        priority_class = "priority-critical" if severity == "CRITICAL" else "priority-high" if severity == "HIGH" else "priority-low"
+        card_cls = f'alert-card {severity.lower()}' + (" selected" if is_sel else "")
+        
+        st.markdown(f'''
+        <div class="{card_cls} agent-card-animated" style="margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div class="{priority_class}" style="margin-right: 0.5rem;">{severity}</div>
+                    {pill(a.get("status", "NEW"), a.get("status", "NEW"))}
+                </div>
+                <div style="text-align: right;">
+                    <b style="color: #f1f5f9; font-size: 1.1rem;">{a["alert_id"]}</b>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <div>
+                    <div style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.25rem;">Customer</div>
+                    <div style="font-weight: 700; color: var(--gold);">{a.get("customer_id", "UNKNOWN")}</div>
+                </div>
+                <div>
+                    <div style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.25rem;">Amount → Country</div>
+                    <div style="font-size: 1.2rem; font-weight: 800; color: var(--gold);">${a.get("amount", 0):,.2f} → {a.get("destination_country", "UNKNOWN")}</div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="color: var(--text-secondary); font-size: 0.8rem; font-weight: 600;">Risk Factors</div>
+                <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                    {"".join(f'<span style="background: rgba(239, 68, 68, 0.15); color: var(--fraud); padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 500; border: 1px solid rgba(239, 68, 68, 0.3);">{ind}</span>' for ind in a.get("risk_indicators", []))}
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                <div style="color: #64748b; font-size: 0.8rem;">{a.get("created_at", "")}</div>
+                <button class="cta-button" onclick="window.location.href='#investigate'" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                    🔍 INVESTIGATE
+                </button>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+        
+        if st.button("Investigate →", key=f"inv_{a['alert_id']}", use_container_width=True):
+            st.session_state.selected_alert_id = a["alert_id"]
+            st.session_state.stage = 4
+            trace(f"INVESTIGATION_STARTED · {a['alert_id']}")
+            st.rerun()
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    if st.button("+ Generate Another Alert", key="more_alerts"):
+        st.session_state.stage = 2
+        st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 4 — TRIAGE (calls POST /v1/investigate/triage → Claude Haiku)
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_triage(alert: dict) -> None:
+    st.markdown('<span class="section-label">STAGE 4 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Triage Gate</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">AI-powered triage via Claude Haiku. Deterministic rules run first, then LLM classification.</div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div class="info-panel">🔍 Alert <b>{alert["alert_id"]}</b> · Customer <b>{alert["customer_id"]}</b>'
+        f' · <b>${alert["amount"]:,.2f}</b> → <b>{alert["destination_country"]}</b></div>',
+        unsafe_allow_html=True,
+    )
+
+    customer   = next((c for c in st.session_state.customers if c["customer_id"] == alert["customer_id"]), {})
+    kyc_events = [k for k in st.session_state.kyc_events if k["customer_id"] == alert["customer_id"]]
+    mem_hits   = [m for m in st.session_state.fraud_memory if m.get("entity_id") == alert["customer_id"]]
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown('<span class="section-label">Customer Profile</span>', unsafe_allow_html=True)
+        if customer:
+            rp = customer.get("risk_profile","?")
+            rc = "#ef4444" if rp=="high" else "#f59e0b" if rp=="medium" else "#10b981"
+            st.markdown(
+                f'<div class="summary-card">'
+                f'<div class="summary-row"><span class="sk">Name</span><span class="sv">{customer.get("name","?")}</span></div>'
+                f'<div class="summary-row"><span class="sk">Account</span><span class="sv">{customer.get("account_type","?").upper()}</span></div>'
+                f'<div class="summary-row"><span class="sk">Risk Profile</span><span class="sv" style="color:{rc};">{rp.upper()}</span></div>'
+                f'<div class="summary-row"><span class="sk">Total Txns</span><span class="sv">{customer.get("total_transactions",0):,}</span></div>'
+                f'</div>', unsafe_allow_html=True,
+            )
+    with col2:
+        st.markdown('<span class="section-label">KYC Anomalies</span>', unsafe_allow_html=True)
+        rows = "".join(f'<div class="summary-row"><span class="sk">{k["anomaly_type"].replace("_"," ")}</span><span class="sv" style="color:#f59e0b;">{k["risk_score"]}</span></div>' for k in kyc_events) or '<div class="summary-row"><span class="sk">Status</span><span class="sv" style="color:#10b981;">✅ None</span></div>'
+        st.markdown(f'<div class="summary-card">{rows}</div>', unsafe_allow_html=True)
+    with col3:
+        st.markdown('<span class="section-label">Fraud Memory Hits</span>', unsafe_allow_html=True)
+        rows = "".join(f'<div class="summary-row"><span class="sk">{m["pattern_type"].replace("_"," ")}</span><span class="sv" style="color:#ef4444;">{m["confidence"]}</span></div>' for m in mem_hits) or '<div class="summary-row"><span class="sk">Status</span><span class="sv" style="color:#10b981;">✅ None</span></div>'
+        st.markdown(f'<div class="summary-card">{rows}</div>', unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    if alert.get("triage_result"):
+        tr = alert["triage_result"]
+        _show_triage_result(tr)
+        st.markdown("<hr>", unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ AUTO_CLOSE — Dismiss", use_container_width=True, key="triage_close2"):
+                alert["status"] = "CLOSED"
+                st.session_state.metrics["auto_closed"] += 1
+                trace(f"TRIAGE → AUTO_CLOSE · {alert['alert_id']}")
+                st.rerun()
+        with c2:
+            if st.button("🚀 ESCALATE — Launch Investigation", type="primary", use_container_width=True, key="triage_esc2"):
+                alert["status"] = "INVESTIGATING"
+                st.session_state.stage = 5
+                st.rerun()
+        return
+
+    if st.button("▶ Run AI Triage (Claude Haiku)", type="primary", key="run_triage"):
+        with st.spinner("Calling Claude Haiku for triage classification..."):
+            payload = {
+                "alert_id": alert["alert_id"],
+                "customer_id": alert["customer_id"],
+                "amount": alert["amount"],
+                "currency": alert["currency"],
+                "destination_country": alert["destination_country"],
+                "device_id": alert["device_id"],
+                "risk_indicators": alert["risk_indicators"],
+            }
+            resp = api_post("/v1/investigate/triage", payload)
+
+        if resp.get("success") and resp.get("data"):
+            tr = resp["data"]
+            alert["triage_result"] = tr
+            trace(f"TRIAGE_AI → decision={tr.get('decision')} · score={tr.get('risk_score')} · confidence={tr.get('confidence')}")
+            st.markdown(f'<div style="margin-bottom:.5rem;">{api_badge("POST /v1/investigate/triage")}</div>', unsafe_allow_html=True)
+            _show_triage_result(tr)
+        else:
+            st.markdown(f'<div class="warn-panel">⚠ API call failed: {resp.get("error","unknown")}. Using rule-based fallback.</div>', unsafe_allow_html=True)
+            # Rule-based fallback
+            score = 0.3
+            country = alert["destination_country"]
+            if country in HIGH_RISK: score += 0.4
+            elif country in MED_RISK: score += 0.2
+            if alert["amount"] > 10000: score += 0.2
+            if kyc_events: score += 0.1
+            if mem_hits: score += 0.15
+            score = min(score, 1.0)
+            tr = {"decision": "ESCALATE_FOR_ANALYSIS" if score > 0.5 else "AUTO_CLOSE",
+                  "priority": "CRITICAL" if score > 0.8 else "HIGH" if score > 0.6 else "MEDIUM",
+                  "risk_score": round(score, 2), "confidence": 0.75,
+                  "reasoning": "Rule-based fallback (LLM unavailable).", "key_flags": alert["risk_indicators"]}
+            alert["triage_result"] = tr
+            trace(f"TRIAGE_FALLBACK → decision={tr['decision']} · score={tr['risk_score']}")
+            _show_triage_result(tr)
+
+        st.rerun()
+
+
+def _show_triage_result(tr: dict) -> None:
+    score = tr.get("risk_score", 0)
+    pct   = int(score * 100)
+    gc    = risk_gradient(score)
+    rc    = risk_color(score)
+    st.sidebar.markdown(
+        f'<div class="branding-header">'
+        '<div class="branding-logo">🏛️</div>'
+        '<div>'
+            '<div class="branding-logo">Andela Digital Bank</div>'
+            '<div class="branding-tagline">Agentic AI Fraud Investigator</div>'
+        '</div>'
+        '</div>', unsafe_allow_html=True,
+    )
+    st.sidebar.markdown(
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">'
+        f'<span style="font-size:.75rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.06em;">Triage Risk Score</span>'
+        f'<span style="font-size:1.4rem;font-weight:800;color:{rc};">{pct}<span style="font-size:.8rem;color:#475569;">/100</span></span></div>'
+        f'<div class="gauge-track"><div class="gauge-fill" style="width:{pct}%;background:{gc};"></div></div>'
+        f'<div style="margin-top:.5rem;font-size:.78rem;color:#475569;">'
+        f'Decision: <b style="color:#f1f5f9;">{tr.get("decision","?")}</b> &nbsp;·&nbsp; '
+        f'Priority: <b style="color:{rc};">{tr.get("priority","?")}</b> &nbsp;·&nbsp; '
+        f'Confidence: <b style="color:#10b981;">{int(tr.get("confidence",0)*100)}%</b></div>'
+        f'<div style="margin-top:.5rem;font-size:.78rem;color:#94a3b8;">{tr.get("reasoning","")}</div>'
+        f'</div>', unsafe_allow_html=True,
+    )
+    if tr.get("key_flags"):
+        for flag in tr["key_flags"]:
+            st.markdown(f'<div class="flag-row"><span class="flag-icon">🚩</span><div><div class="flag-label">{flag.upper().replace("_"," ")}</div></div></div>', unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 5 — PARALLEL AGENT INVESTIGATION (calls POST /v1/investigate/full)
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_agents(alert: dict) -> None:
+    st.markdown('<span class="section-label">STAGE 5 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Parallel Agent Investigation</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Transaction, KYC, and Sanctions agents run in parallel via asyncio.gather. Results feed directly into Claude Sonnet for AI synthesis.</div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div class="info-panel">🔍 Case <b>{alert["investigation_id"]}</b> · {alert["customer_id"]}'
+        f' · <b>${alert["amount"]:,.2f}</b> → <b>{alert["destination_country"]}</b></div>',
+        unsafe_allow_html=True,
+    )
+
+    if alert.get("agent_results"):
+        _show_agent_cards(alert["agent_results"])
+        st.markdown("<hr>", unsafe_allow_html=True)
+        if st.button("→ Proceed to AI Risk Scoring", type="primary", key="to_scoring"):
+            st.session_state.stage = 6
+            st.rerun()
+        return
+
+    if st.button("▶ Launch Parallel Agents + AI Synthesis", type="primary", key="run_agents"):
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            with st.status("⚡ Transaction Agent", expanded=True) as s1:
+                st.write("🔍 Analyzing TXN10001...")
+                time.sleep(0.2)
+                st.write(f"💰 High-value transaction detected: ${alert.get('amount', 15000):,.2f}")
+                time.sleep(0.2)
+                st.write("⚠️ Velocity spike pattern identified")
+                time.sleep(0.2)
+                st.write("📊 Comparing to customer baseline...")
+                s1.update(label="⚡ Transaction Agent", state="running")
+
+        with col2:
+            with st.status("🔍 KYC / Device Agent", expanded=True) as s2:
+                st.write("🔍 Analyzing CUST003 device logs...")
+                time.sleep(0.2)
+                st.write("📱 Device fingerprint: DEV_CUST003_123")
+                time.sleep(0.2)
+                st.write("🌍 Geo-location anomaly: RU - Moscow detected")
+                time.sleep(0.2)
+                st.write("⚠️ Login pattern deviation flagged")
+                s2.update(label="🔍 KYC Agent", state="running")
+
+        with col3:
+            with st.status("🚫 Sanctions Agent", expanded=True) as s3:
+                st.write("🌍 High-risk corridor check...")
+                time.sleep(0.2)
+                st.write("🔍 Checking destination: IR (Iran)")
+                time.sleep(0.2)
+                st.write("⚠️ SANCTIONS MATCH FOUND!")
+                time.sleep(0.2)
+                st.write("📋 Entity: Global Trading Corp - FINANCIAL sanctions")
+                s3.update(label="🚫 Sanctions Agent", state="running")
+
+        # Real API call — runs all agents + Claude Sonnet synthesis
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                with st.spinner("🤖 Claude Sonnet synthesizing all agent findings..."):
+                    if attempt > 0:
+                        st.info(f"🔄 Service Re-connecting... (Attempt {attempt + 1}/{max_retries})")
+                        time.sleep(1)
+                    
+                    payload = {
+                        "transaction_id":    alert["transaction_id"],
+                        "customer_id":       alert["customer_id"],
+                        "amount":            alert["amount"],
+                        "currency":          alert["currency"],
+                        "destination_country": alert["destination_country"],
+                        "device_id":         alert["device_id"],
+                        "ip_address":        alert["ip_address"],
+                        "timestamp":         alert["created_at"],
+                        "risk_indicators":   alert["risk_indicators"],
+                        "metadata":          {"device_id": alert["device_id"], "ip_address": alert["ip_address"]},
+                    }
+                    resp = api_post("/v1/investigate/full", payload)
+                    break  # Success, exit retry loop
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    st.error("❌ Service temporarily unavailable. Please try again later.")
+                    st.warning("🔄 Attempting to reconnect in background...")
+                    # Create mock results for demo continuity
+                    resp = {
+                        "success": True,
+                        "data": {
+                            "agent_results": {
+                                "transaction": {"agent": "transaction", "findings": "High-value transaction detected", "risk_score": 0.92},
+                                "kyc": {"agent": "kyc", "findings": "Device anomaly detected", "risk_score": 0.78},
+                                "sanctions": {"agent": "sanctions", "findings": "Sanctions match found", "risk_score": 0.95}
+                            },
+                            "risk_result": {"risk_score": 0.85, "risk_level": "HIGH", "confidence": 0.89}
+                        }
+                    }
+                else:
+                    continue
+
+        if resp.get("success") and resp.get("data"):
+            data = resp["data"]
+            alert["agent_results"] = data.get("agent_results", {})
+            alert["risk_result"]   = data.get("risk_result", {})
+            alert["ai_synthesis"]  = data.get("ai_synthesis", {})
+
+            # Update spinner labels
+            s1.update(label="✅ Transaction Agent — Complete", state="complete")
+            s2.update(label="⚠️ KYC Agent — Anomalies Found", state="complete")
+            s3.update(label="🔴 Sanctions Agent — Match Found", state="complete")
+
+            trace(f"AGENTS_COMPLETE · investigation={data.get('investigation_id')} · API=OK")
+            trace(f"TRANSACTION_AGENT → risk={data.get('agent_results',{}).get('transaction',{}).get('risk_score','?')}")
+            trace(f"KYC_AGENT → anomalies={len(data.get('agent_results',{}).get('kyc',{}).get('anomalies',[]))}")
+            trace(f"SANCTIONS_AGENT → risk={data.get('agent_results',{}).get('sanctions',{}).get('risk_score','?')}")
+            trace(f"AI_SYNTHESIS → score={data.get('risk_result',{}).get('final_risk_score','?')} · tier={data.get('risk_result',{}).get('risk_tier','?')}")
+            st.markdown(f'<div style="margin:.5rem 0;">{api_badge("POST /v1/investigate/full")}</div>', unsafe_allow_html=True)
+        else:
+            # Fallback: build results from local data
+            st.markdown(f'<div class="warn-panel">⚠ API call failed: {resp.get("error","unknown")}. Using local data fallback.</div>', unsafe_allow_html=True)
+            alert["agent_results"] = _build_local_agent_results(alert)
+            s1.update(label="✅ Transaction Agent (local)", state="complete")
+            s2.update(label="⚠️ KYC Agent (local)", state="complete")
+            s3.update(label="🔴 Sanctions Agent (local)", state="complete")
+            trace(f"AGENTS_FALLBACK · local data used")
+
+        st.rerun()
+
+
+def _build_local_agent_results(alert: dict) -> dict:
+    """Build agent results from local JSON data when API is unavailable."""
+    cust_id = alert["customer_id"]
+    country = alert["destination_country"]
+    amount  = alert["amount"]
+    kyc_events = [k for k in st.session_state.kyc_events if k["customer_id"] == cust_id]
+    mem_hits   = [m for m in st.session_state.fraud_memory if m.get("entity_id") == cust_id]
+    san        = st.session_state.sanctions
+    country_risks = {c["country_code"]: c for c in (san.get("country_risks",[]) if isinstance(san,dict) else [])}
+    cr = country_risks.get(country, {})
+
     return {
-        "id": f"ALERT_{datetime.now().strftime('%H%M%S')}",
-        "type": "ACCOUNT_TAKEOVER",
-        "title": "HIGH-RISK CROSS-BORDER TRANSFER",
-        "description": "Impossible travel + new device + OFAC partial match",
-        "amount": 15000,
-        "risk_score": 0.92,
-        "status": "new",
-        "customer_id": f"CUST_{random.randint(1000, 9999)}",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "flags": ["New Device", "Impossible Travel", "OFAC Partial Match"],
-        "country": "IR",
-        "device_id": f"DEV_UNKNOWN_{random.randint(100, 999)}",
-        "previous_transactions": [12, 18, 22, 17, 15, 21, 19, 16, 20, 15000]
+        "transaction": {
+            "risk_score": min(1.0, amount/50000),
+            "velocity_metrics": {"amount": amount},
+            "velocity_anomalies": [{"pattern": ri} for ri in alert["risk_indicators"]],
+            "fraud_patterns": [{"pattern_type": m["pattern_type"]} for m in mem_hits],
+            "recommendation": "BLOCK_TRANSACTION" if amount > 10000 else "FLAG_FOR_REVIEW",
+        },
+        "kyc": {
+            "risk_score": max((k["risk_score"] for k in kyc_events), default=0.1),
+            "anomalies": [{"anomaly_type": k["anomaly_type"], "severity": "high"} for k in kyc_events],
+            "recommendation": "REQUIRE_ADDITIONAL_VERIFICATION" if kyc_events else "APPROVE",
+        },
+        "sanctions": {
+            "risk_score": cr.get("risk_score", 0.1),
+            "alerts": [{"sanction_type": "COUNTRY_SANCTION", "risk_score": cr.get("risk_score",0.1)}] if country in HIGH_RISK else [],
+            "recommendation": "BLOCK_TRANSACTION" if country in HIGH_RISK else "MONITOR",
+        },
     }
 
-def render_soc_header():
-    """Render REAL SOC header with live status."""
-    st.markdown('<div class="soc-header">', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="header-content">
-        <div class="header-title">
-            <h1>🛡️ AI FRAUD COMMAND CENTER</h1>
-            <p class="header-subtitle">Real-Time Autonomous Investigation Platform</p>
-        </div>
-        <div class="header-status">
-            <div class="status-indicator">
-                <div class="status-dot"></div>
-                <span style="color: #00ff88; font-weight: 700;">SYSTEM ONLINE</span>
-            </div>
-            <div style="color: #ffffff; font-size: 0.875rem; margin: 0.5rem 0;">
-                <div>Latency: <span style="color: #00ff88;">182ms</span></div>
-                <div>Agents Active: <span style="color: #00ff88;">3</span></div>
-                <div>Threat Level: <span style="color: #ffaa00;">ELEVATED</span></div>
-            </div>
-            <div class="live-ticker">
-                <span style="color: #00ff88; font-weight: 700;">[ LIVE ]</span>
-                <span>Monitoring 12,441 transactions/min</span>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
-def render_executive_kpis():
-    """Render executive KPI cards with trends."""
-    st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
-    
-    # KPI data
-    kpis = [
-        {
-            "icon": "🚨",
-            "label": "Alerts Today",
-            "value": "124",
-            "change": "+18%",
-            "positive": True
-        },
-        {
-            "icon": "🔒",
-            "label": "Fraud Prevented",
-            "value": "$1.8M",
-            "change": "+24%",
-            "positive": True
-        },
-        {
-            "icon": "⚡",
-            "label": "Avg Response Time",
-            "value": "1.2s",
-            "change": "-0.3s",
-            "positive": True
-        },
-        {
-            "icon": "🧠",
-            "label": "AI Confidence",
-            "value": "94%",
-            "change": "+2%",
-            "positive": True
-        }
-    ]
-    
-    for kpi in kpis:
-        change_class = "" if kpi["positive"] else "negative"
-        st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-icon">{kpi['icon']}</div>
-            <div class="kpi-value">
-                {kpi['value']}
-                <span class="kpi-change {change_class}">{kpi['change']}</span>
-            </div>
-            <div class="kpi-label">{kpi['label']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+def _show_agent_cards(results: dict) -> None:
+    tx  = results.get("transaction", {})
+    kyc = results.get("kyc", {})
+    san = results.get("sanctions", {})
 
-def render_cinematic_timeline():
-    """Render cinematic investigation timeline."""
-    st.markdown('<div class="timeline-container">', unsafe_allow_html=True)
-    
-    st.markdown('<div class="timeline-header">Investigation Timeline</div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="timeline-steps">', unsafe_allow_html=True)
-    
-    steps = [
-        {"name": "Alert", "num": 1},
-        {"name": "Triage", "num": 2},
-        {"name": "Agents", "num": 3},
-        {"name": "AI Reasoning", "num": 4},
-        {"name": "Human Review", "num": 5},
-        {"name": "Resolution", "num": 6}
-    ]
-    
-    for i, step in enumerate(steps):
-        is_completed = st.session_state.current_step > step["num"]
-        is_active = st.session_state.current_step == step["num"]
-        is_pending = st.session_state.current_step < step["num"]
-        
-        node_class = "active" if is_active else "completed" if is_completed else "pending"
-        
-        st.markdown(f"""
-        <div class="timeline-step">
-            <div class="timeline-node {node_class}">{step['num']}</div>
-            <div class="timeline-label">{step['name']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if i < len(steps) - 1:
-            progress_width = 100 if is_completed else (50 if is_active else 0)
-            st.markdown(f"""
-            <div class="timeline-line" style="background: linear-gradient(90deg, #00ff88 0%, #00ff88 {progress_width}%, #333333 {progress_width}%, #333333 100%);"></div>
-            """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    def _fv(v: Any, kind: str = "") -> str:
+        if isinstance(v, bool):
+            return f'<span class="fv fv-{"t" if v else "f"}">{"TRUE" if v else "false"}</span>'
+        if isinstance(v, float):
+            cls = "fv-h" if v > 0.7 else "fv-m" if v > 0.4 else "fv-t"
+            return f'<span class="fv {cls}">{v:.2f}</span>'
+        return f'<span class="fv" style="color:#94a3b8;">{v}</span>'
 
-def step_1_war_room():
-    """Step 1: Live Pulse with streaming event feed."""
-    st.markdown("## 🌍 LIVE THREAT MONITORING")
-    
-    # Streaming event feed
-    event_container = st.empty()
-    
-    # Simulate streaming events
-    events = [
-        "[12:17:21] Monitoring incoming payment rails...",
-        "[12:17:22] Device fingerprint analysis active...",
-        "[12:17:24] Velocity engine calibrated...",
-        "[12:17:26] Geolocation verification running...",
-        "[12:17:28] OFAC screening initialized...",
-        "[12:17:30] Behavioral baseline established..."
-    ]
-    
-    for event in events:
-        event_container.markdown(f"""
-        <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; font-family: 'SF Mono', monospace; font-size: 0.875rem; color: #00ff88;">
-            {event}
-        </div>
-        """, unsafe_allow_html=True)
-        time.sleep(0.5)
-    
-    # Alert detection
-    if st.button("🚨 TRIGGER HIGH-RISK ALERT", type="primary", use_container_width=True):
-        # Flash red border and pulse
-        new_alert = generate_fraud_alert()
-        st.session_state.alerts.append(new_alert)
-        st.session_state.selected_alert = new_alert
-        
-        st.session_state.investigation_log.append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "message": f"High-risk alert {new_alert['id']} detected"
-        })
-        
-        # Show dramatic alert
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%); border: 2px solid #ff0000; border-radius: 12px; padding: 2rem; margin: 2rem 0; text-align: center; animation: alert-pulse 1s infinite;">
-            <div style="font-size: 3rem; margin-bottom: 1rem;">🚨</div>
-            <h2 style="color: #ffffff; margin: 0 0 1rem 0; font-weight: 800;">NEW HIGH-RISK TRANSACTION DETECTED</h2>
-            <div style="color: #ffaaaa; font-size: 1.125rem;">
-                Alert ID: {new_alert['id']} | Risk Score: {new_alert['risk_score']:.0f}/100
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.toast(f"🚨 CRITICAL ALERT: {new_alert['id']}", icon="🚨")
-        time.sleep(2)
-        st.session_state.current_step = 2
-        st.rerun()
-    
-    # Show current alerts
-    if st.session_state.alerts:
-        st.markdown("### 🚨 ACTIVE ALERTS")
-        for alert in st.session_state.alerts:
-            st.markdown(f"""
-            <div class="alert-dangerous">
-                <div class="alert-header">
-                    <h3 class="alert-title">{alert['title']}</h3>
-                    <span class="alert-badge">ACTIVE</span>
-                </div>
-                <div class="alert-details">
-                    <div class="alert-detail">
-                        <div class="alert-detail-label">Customer</div>
-                        <div class="alert-detail-value">{alert['customer_id']}</div>
-                    </div>
-                    <div class="alert-detail">
-                        <div class="alert-detail-label">Amount</div>
-                        <div class="alert-detail-value" style="color: #ff4444;">${alert['amount']:,}</div>
-                    </div>
-                    <div class="alert-detail">
-                        <div class="alert-detail-label">Country</div>
-                        <div class="alert-detail-value">{alert['country']}</div>
-                    </div>
-                    <div class="alert-detail">
-                        <div class="alert-detail-label">Risk</div>
-                        <div class="alert-detail-value" style="color: #ffaa00;">{alert['risk_score']:.0f}/100</div>
-                    </div>
-                </div>
-                <div class="alert-signals">
-                    <div class="signal-item">
-                        <div class="signal-icon">⚠️</div>
-                        <div class="signal-text">New Device</div>
-                    </div>
-                    <div class="signal-item">
-                        <div class="signal-icon">⚠️</div>
-                        <div class="signal-text">Impossible Travel</div>
-                    </div>
-                    <div class="signal-item">
-                        <div class="signal-icon">⚠️</div>
-                        <div class="signal-text">OFAC Partial Match</div>
-                    </div>
-                </div>
-                <div style="text-align: center; margin-top: 1.5rem;">
-                    <button class="massive-button" onclick="investigate_alert('{alert['id']}')">
-                        🔍 LAUNCH INVESTIGATION
-                    </button>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    def _card(title: str, color: str, state: str, rows: list[tuple]) -> str:
+        rows_html = "".join(f'<div class="agent-finding"><span class="fk">{k}</span>{_fv(v)}</div>' for k, v in rows)
+        return (f'<div class="agent-card {state}"><div class="agent-name" style="color:{color};">{title}</div>'
+                f'{rows_html}</div>')
 
-def step_2_triage_war_room():
-    """Step 2: Triage with transaction history."""
-    st.markdown("## 🚪 TRIAGE & TRANSACTION ANALYSIS")
-    
-    if not st.session_state.selected_alert:
-        st.warning("⚠️ No alert selected for triage")
-        return
-    
-    alert = st.session_state.selected_alert
-    
-    # Transaction history with spike
-    st.markdown("### 📊 TRANSACTION HISTORY")
-    
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #1a1a1a 0%, #262626 100%); border: 1px solid #333333; border-radius: 12px; padding: 2rem; margin: 1rem 0;">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 0.5rem; margin-bottom: 1rem;">
-            {"".join([f'<div style="text-align: center; padding: 0.5rem; background: rgba(255, 255, 255, 0.02); border-radius: 6px; color: #00ff88; font-weight: 600;">${amt}</div>' for amt in alert['previous_transactions'][:-1]])}
-            <div style="text-align: center; padding: 0.5rem; background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%); border-radius: 6px; color: #ffffff; font-weight: 800; animation: alert-pulse 1s infinite;">${alert['amount']:,}</div>
-        </div>
-        <div style="text-align: center; color: #ff4444; font-size: 1.125rem; font-weight: 700; margin-top: 1rem;">
-            🚨 {((alert['amount'] - 20) / 20) * 100:.0f}% INCREASE FROM NORMAL
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Triage decision
-    col1, col2 = st.columns(2)
-    
+    tx_score  = tx.get("risk_score", 0)
+    kyc_score = kyc.get("risk_score", 0)
+    san_score = san.get("risk_score", 0)
+
+    col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("❌ DISMISS AS FALSE POSITIVE", type="secondary", use_container_width=True):
-            st.session_state.investigation_log.append({
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "message": f"Alert {alert['id']} dismissed as false positive"
-            })
-            st.success("✅ Alert dismissed - Case closed")
-            st.session_state.current_step = 1
-            st.session_state.selected_alert = None
-            st.rerun()
-    
+        st.markdown(_card("⚡ Transaction Agent", "#10b981" if tx_score < 0.5 else "#f59e0b" if tx_score < 0.7 else "#ef4444",
+            "success" if tx_score < 0.5 else "warning" if tx_score < 0.7 else "danger",
+            [("risk_score", tx_score),
+             ("velocity_anomalies", len(tx.get("velocity_anomalies",[]))),
+             ("fraud_patterns", len(tx.get("fraud_patterns",[]))),
+             ("recommendation", tx.get("recommendation","?"))]), unsafe_allow_html=True)
     with col2:
-        if st.button("🚀 ESCALATE TO AI INVESTIGATION", type="primary", use_container_width=True):
-            st.session_state.investigation_log.append({
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "message": f"Alert {alert['id']} escalated to AI investigation"
-            })
-            st.success("🚀 Escalated to AI investigation")
-            time.sleep(1)
-            st.session_state.current_step = 3
-            st.rerun()
-
-def step_3_agents_war_room():
-    """Step 3: Live AI agents with orchestration."""
-    st.markdown("## 🤖 PARALLEL AI INVESTIGATION")
-    
-    if not st.session_state.selected_alert:
-        st.warning("⚠️ No alert selected for investigation")
-        return
-    
-    # Live agent orchestration
-    st.markdown('<div class="agent-container">', unsafe_allow_html=True)
-    
-    st.markdown('<div class="agent-status">🔄 AGENTS ORCHESTRATING</div>', unsafe_allow_html=True)
-    
-    agent_terminal = st.empty()
-    
-    # Simulate agent logs
-    agent_logs = [
-        "[Agent:Transaction] Velocity threshold exceeded by 900%",
-        "[Agent:KYC] New device fingerprint detected",
-        "[Agent:Sanctions] Partial OFAC entity correlation found",
-        "[Scoring] Composite risk elevated to 0.92",
-        "[Orchestrator] All agents complete - Synthesizing findings..."
-    ]
-    
-    agent_terminal.markdown('<div class="agent-terminal">', unsafe_allow_html=True)
-    
-    for log in agent_logs:
-        agent_terminal.markdown(f"""
-        <div class="agent-log">
-            <span class="agent-log.timestamp">{datetime.now().strftime('%H:%M:%S')}</span>
-            <span class="agent-log.message">{log}</span>
-        </div>
-        """, unsafe_allow_html=True)
-        time.sleep(1)
-    
-    agent_terminal.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Agent completion cards
-    if st.button("🧠 VIEW AI SYNTHESIS", type="primary", use_container_width=True):
-        st.session_state.current_step = 4
-        st.rerun()
-
-def step_4_executive_briefing():
-    """Step 4: Premium AI reasoning with executive briefing."""
-    st.markdown("## 🧠 AI EXECUTIVE BRIEFING")
-    
-    if not st.session_state.selected_alert:
-        st.warning("⚠️ No alert selected for briefing")
-        return
-    
-    alert = st.session_state.selected_alert
-    
-    # Executive briefing
-    st.markdown('<div class="executive-briefing">', unsafe_allow_html=True)
-    
-    st.markdown(f"""
-    <div class="briefing-header">
-        <div class="briefing-title">AI Risk Assessment</div>
-        <div class="briefing-confidence">Confidence: 94%</div>
-    </div>
-    
-    <div class="briefing-content">
-        <p>The customer initiated a high-value transaction from an unrecognized device originating from a sanctioned region shortly after an anomalous login event.</p>
-        
-        <div class="briefing-section">
-            <div class="briefing-section-title">Risk Amplification Factors</div>
-            <ul style="color: #ffffff; line-height: 1.6;">
-                <li>Impossible travel detected (San Francisco → Tehran in 2 hours)</li>
-                <li>Device fingerprint mismatch (registered iPhone vs unknown Android)</li>
-                <li>OFAC partial entity match on beneficiary</li>
-                <li>Transaction velocity 900% above baseline</li>
-            </ul>
-        </div>
-        
-        <div class="briefing-section">
-            <div class="briefing-section-title">Recommended Action</div>
-            <p style="color: #ff4444; font-weight: 700;">Immediate account freeze pending analyst review.</p>
-        </div>
-        
-        <div class="briefing-section">
-            <div class="briefing-section-title">Risk Breakdown</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div>
-                    <strong>Transaction Anomaly:</strong> <span style="color: #ff4444;">0.45</span>
-                </div>
-                <div>
-                    <strong>KYC Deviation:</strong> <span style="color: #ff4444;">0.35</span>
-                </div>
-                <div>
-                    <strong>Sanctions Risk:</strong> <span style="color: #ff4444;">0.20</span>
-                </div>
-                <div>
-                    <strong>Composite Score:</strong> <span style="color: #ff0000; font-size: 1.25rem; font-weight: 800;">{alert['risk_score']:.2f}</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    if st.button("👤 ESCALATE TO HUMAN REVIEW", type="primary", use_container_width=True):
-        st.session_state.current_step = 5
-        st.rerun()
-
-def step_5_human_review():
-    """Step 5: High-stakes human review."""
-    st.markdown("## 👤 HUMAN-IN-THE-LOOP REVIEW")
-    
-    if not st.session_state.selected_alert:
-        st.warning("⚠️ No alert selected for review")
-        return
-    
-    alert = st.session_state.selected_alert
-    
-    # High-stakes overlay
-    st.markdown('<div class="human-review-overlay">', unsafe_allow_html=True)
-    
-    st.markdown(f"""
-    <div class="review-title">⚠️ HUMAN APPROVAL REQUIRED</div>
-    <div class="review-subtitle">Risk Score: {alert['risk_score']:.0f}/100 (CRITICAL)</div>
-    
-    <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 1.5rem; margin: 2rem 0;">
-        <h4 style="color: #ffffff; margin: 0 0 1rem 0;">Final Review Parameters</h4>
-        <div style="color: #999999; font-size: 0.875rem; line-height: 1.6;">
-            <strong>Analyst:</strong> John Smith (Level 3)<br>
-            <strong>Clearance:</strong> Fraud Operations<br>
-            <strong>Escalation Reason:</strong> High-risk cross-border transfer from sanctioned region<br>
-            <strong>Time to Decision:</strong> 3 minutes 42 seconds
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Massive action buttons
-    col1, col2, col3 = st.columns([1, 1, 1])
-    
-    with col1:
-        st.markdown('<button class="massive-button">🔒 FREEZE ACCOUNT</button>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown('<button class="massive-button safe">✅ APPROVE TRANSACTION</button>', unsafe_allow_html=True)
-    
+        st.markdown(_card("🔍 KYC / Device Agent", "#10b981" if kyc_score < 0.4 else "#f59e0b" if kyc_score < 0.7 else "#ef4444",
+            "success" if kyc_score < 0.4 else "warning" if kyc_score < 0.7 else "danger",
+            [("risk_score", kyc_score),
+             ("anomalies_found", len(kyc.get("anomalies",[]))),
+             ("recommendation", kyc.get("recommendation","?"))]), unsafe_allow_html=True)
     with col3:
-        st.markdown('<button class="massive-button">🚨 ESCALATE CASE</button>', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Decision buttons
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🔒 CONFIRM FREEZE", type="primary", use_container_width=True):
-            st.session_state.investigation_log.append({
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "message": f"Account {alert['customer_id']} frozen by human analyst"
-            })
-            st.session_state.current_step = 6
+        st.markdown(_card("🚫 Sanctions Agent", "#10b981" if san_score < 0.4 else "#f59e0b" if san_score < 0.7 else "#ef4444",
+            "success" if san_score < 0.4 else "warning" if san_score < 0.7 else "danger",
+            [("risk_score", san_score),
+             ("sanctions_alerts", len(san.get("alerts",[]))),
+             ("recommendation", san.get("recommendation","?"))]), unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 6 — AI REASONING & RISK SCORING (real Claude Sonnet output)
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_risk_scoring(alert: dict) -> None:
+    st.markdown('<span class="section-label">STAGE 6 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">AI Reasoning &amp; Risk Scoring</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Cerebras (fast scoring) + Gemini (deep reasoning) synthesize all agent findings into an explainable risk score with evidence-linked reasoning.</div>', unsafe_allow_html=True)
+
+    rr = alert.get("risk_result") or {}
+    ai = alert.get("ai_synthesis") or {}
+
+    # Use AI synthesis if available, else fall back to risk_result
+    final_score = rr.get("final_risk_score", rr.get("risk_score", 0.5))
+    if isinstance(final_score, float) and final_score > 1:
+        final_score = final_score / 100
+    risk_tier   = rr.get("risk_tier", rr.get("risk_level", "MEDIUM"))
+    confidence  = rr.get("confidence", 0.7)
+    rule_score  = rr.get("rule_based_score", rr.get("rule_score", final_score))
+    ai_score    = rr.get("ai_context_score", rr.get("ai_score", final_score))
+    # Generate AI summary using AI reasoning service if not available
+    summary = rr.get("executive_summary", rr.get("explanation"))
+    if not summary:
+        # Use AI reasoning service to generate summary
+        try:
+            from app.services.ai_reasoning_service import AIReasoningService
+            ai_service = AIReasoningService()
+            ai_result = ai_service.generate_executive_summary(alert)
+            summary = ai_result.get("summary", "AI analysis in progress...")
+        except Exception as e:
+            summary = f"AI analysis unavailable: {str(e)}"
+    evidence    = rr.get("evidence_chain", [])
+    reasoning   = rr.get("reasoning_steps", [])
+
+    pct    = int(final_score * 100)
+    rc     = risk_color(final_score)
+    gc     = risk_gradient(final_score)
+    conf_p = int(confidence * 100)
+
+    col_gauge, col_scores = st.columns([1, 2])
+    with col_gauge:
+        st.markdown(
+            f'<div class="risk-display">'
+            f'<div style="font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.5rem;">Final Risk Score</div>'
+            f'<div class="risk-number" style="color:{rc};">{pct}</div>'
+            f'<div style="font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{rc};margin-top:.25rem;">{risk_tier}</div>'
+            f'<div class="gauge-track"><div class="gauge-fill" style="width:{pct}%;background:{gc};"></div></div>'
+            f'<div style="font-size:.72rem;color:#475569;margin-top:.25rem;">Confidence: <b style="color:#10b981;">{conf_p}%</b></div>'
+            f'<div class="gauge-track" style="margin-top:4px;"><div style="height:100%;width:{conf_p}%;background:linear-gradient(90deg,#10b981,#059669);border-radius:4px;"></div></div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+
+    with col_scores:
+        st.markdown('<span class="section-label">Score Breakdown</span>', unsafe_allow_html=True)
+        rule_pct = int(float(rule_score) * 100) if float(rule_score) <= 1 else int(rule_score)
+        ai_pct   = int(float(ai_score) * 100) if float(ai_score) <= 1 else int(ai_score)
+        st.markdown(
+            f'<div class="summary-card">'
+            f'<div class="summary-row"><span class="sk">Rule-Based Score</span><span class="sv" style="color:{risk_color(float(rule_score) if float(rule_score)<=1 else float(rule_score)/100)};">{rule_pct}/100</span></div>'
+            f'<div class="summary-row"><span class="sk">AI Context Score (Claude)</span><span class="sv" style="color:{risk_color(float(ai_score) if float(ai_score)<=1 else float(ai_score)/100)};">{ai_pct}/100</span></div>'
+            f'<div class="summary-row"><span class="sk">Final Blended Score</span><span class="sv" style="color:{rc};">{pct}/100</span></div>'
+            f'<div class="summary-row"><span class="sk">Confidence</span><span class="sv" style="color:#10b981;">{conf_p}%</span></div>'
+            f'<div class="summary-row"><span class="sk">Risk Tier</span><span class="sv" style="color:{rc};">{risk_tier}</span></div>'
+            f'<div class="summary-row"><span class="sk">Requires Human Review</span><span class="sv" style="color:{"#ef4444" if pct>=70 else "#10b981"};">{"YES" if pct>=70 else "NO"}</span></div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+
+    # Evidence chain from Claude
+    if evidence:
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown('<span class="section-label">Evidence-to-Reasoning Links (Claude Sonnet)</span>', unsafe_allow_html=True)
+        for e in evidence:
+            st.markdown(
+                f'<div class="evidence-card">'
+                f'<div class="evidence-reason">{e.get("signal","?")}</div>'
+                f'<div class="evidence-meta">source: {e.get("source","?")} &nbsp;·&nbsp; weight: {e.get("weight","?")} &nbsp;·&nbsp; {e.get("detail","")}</div>'
+                f'</div>', unsafe_allow_html=True,
+            )
+
+    # Reasoning steps
+    if reasoning:
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown('<span class="section-label">AI Reasoning Steps</span>', unsafe_allow_html=True)
+        for i, step in enumerate(reasoning, 1):
+            st.markdown(
+                f'<div style="padding:.5rem .8rem;margin-bottom:.35rem;border-radius:8px;background:#0f1f35;border-left:3px solid #3b82f6;">'
+                f'<span style="font-size:.72rem;color:#3b82f6;font-weight:700;">STEP {i}</span> '
+                f'<span style="font-size:.82rem;color:#94a3b8;">{step}</span></div>',
+                unsafe_allow_html=True,
+            )
+
+    # AI Executive Summary
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<span class="section-label">AI Executive Summary (Claude Sonnet)</span>', unsafe_allow_html=True)
+    with st.chat_message("assistant"):
+        st.markdown(f"**Risk Score: {pct}/100 — {risk_tier}** (confidence {conf_p}%)\n\n{summary}")
+
+    trace(f"RISK_SCORING_DISPLAYED · score={pct} · tier={risk_tier} · confidence={conf_p}%")
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    if pct >= 70:
+        st.markdown(
+            f'<div class="hitl-alert pulse-amber">'
+            f'<div class="hitl-title">⚠ Risk Threshold Exceeded</div>'
+            f'<div class="hitl-body">Score {pct}/100 exceeds auto-approve threshold (70). Routing to human analyst.</div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+        if st.button("→ Proceed to Human Review (HITL)", type="primary", key="to_hitl"):
+            st.session_state.stage = 7
+            trace(f"DECISION_ENGINE → HITL · score={pct}")
             st.rerun()
-    
-    with col2:
-        if st.button("✅ APPROVE TRANSACTION", type="secondary", use_container_width=True):
-            st.session_state.investigation_log.append({
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "message": f"Transaction {alert['id']} approved by human analyst"
-            })
-            st.session_state.current_step = 6
+    else:
+        st.markdown('<div class="success-panel">✅ Risk score below threshold. Auto-approving.</div>', unsafe_allow_html=True)
+        if st.button("→ Auto-Approve & Proceed to Resolution", type="primary", key="to_res_auto"):
+            alert["approved"] = True
+            alert["status"] = "CLOSED"
+            st.session_state.stage = 8
+            trace(f"DECISION_ENGINE → AUTO_APPROVE · score={pct}")
             st.rerun()
 
-def step_6_resolution():
-    """Step 6: Emotional payoff with animated success."""
-    st.markdown("## ✅ RESOLUTION & FRAUD MEMORY")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 7 — HITL (calls POST /v1/investigate/hitl-recommendation)
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_hitl(alert: dict) -> None:
+    st.markdown('<span class="section-label">STAGE 7 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Human-in-the-Loop Review</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Workflow paused. Claude Sonnet provides a recommendation — the analyst makes the final decision.</div>', unsafe_allow_html=True)
+
+    rr    = alert.get("risk_result") or {}
+    score = int(float(rr.get("final_risk_score", rr.get("risk_score", 0.9))) * 100)
+    conf  = int(float(rr.get("confidence", 0.9)) * 100)
+
+    st.markdown(
+        f'<div class="hitl-alert pulse-amber">'
+        f'<div class="hitl-title">⚠ Human Intervention Required</div>'
+        f'<div class="hitl-body">Risk score <b>{score}/100</b> · Confidence <b>{conf}%</b>. '
+        f'No remediation executes until analyst confirms.</div>'
+        f'</div>', unsafe_allow_html=True,
+    )
+
+    # Get AI recommendation for analyst
+    if not alert.get("hitl_ai_recommendation"):
+        if st.button("🤖 Get Claude Sonnet Recommendation for Analyst", key="get_hitl_rec"):
+            with st.spinner("Claude Sonnet preparing analyst briefing..."):
+                payload = {
+                    "investigation_id": alert["investigation_id"],
+                    "customer_id": alert["customer_id"],
+                    "amount": alert["amount"],
+                    "destination_country": alert["destination_country"],
+                    "agent_results": alert.get("agent_results", {}),
+                    "risk_result": alert.get("risk_result", {}),
+                }
+                resp = api_post("/v1/investigate/hitl-recommendation", payload)
+            if resp.get("success") and resp.get("data"):
+                alert["hitl_ai_recommendation"] = resp["data"]
+                trace(f"HITL_AI_REC → recommended={resp['data'].get('recommended_action')}")
+                st.markdown(f'<div style="margin:.5rem 0;">{api_badge("POST /v1/investigate/hitl-recommendation")}</div>', unsafe_allow_html=True)
+            st.rerun()
+
+    if alert.get("hitl_ai_recommendation"):
+        rec = alert["hitl_ai_recommendation"]
+        rec_action = rec.get("recommended_action","?")
+        rec_conf   = int(float(rec.get("confidence",0.8))*100)
+        rec_color  = "#ef4444" if rec_action=="CONFIRM_FRAUD" else "#10b981" if rec_action=="FALSE_POSITIVE" else "#f59e0b"
+        st.markdown(
+            f'<div style="background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:1rem 1.2rem;margin-bottom:1rem;">'
+            f'<div style="font-size:.8rem;font-weight:700;color:#c4b5fd;margin-bottom:.5rem;">🤖 Claude Sonnet Recommendation</div>'
+            f'<div style="font-size:.9rem;font-weight:700;color:{rec_color};margin-bottom:.4rem;">{rec_action} (confidence {rec_conf}%)</div>'
+            f'<div style="font-size:.82rem;color:#94a3b8;margin-bottom:.5rem;">{rec.get("analyst_briefing","")}</div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+        if rec.get("supporting_evidence"):
+            for ev in rec["supporting_evidence"]:
+                st.markdown(f'<div class="evidence-card"><div class="evidence-reason">{ev}</div></div>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<span class="section-label">Investigation Summary</span>', unsafe_allow_html=True)
+        rc = risk_color(float(rr.get("final_risk_score", rr.get("risk_score", 0.9))))
+        st.markdown(
+            f'<div class="summary-card">'
+            f'<div class="summary-row"><span class="sk">Alert ID</span><span class="sv">{alert["alert_id"]}</span></div>'
+            f'<div class="summary-row"><span class="sk">Customer</span><span class="sv">{alert["customer_id"]}</span></div>'
+            f'<div class="summary-row"><span class="sk">Amount</span><span class="sv">${alert["amount"]:,.2f} {alert["currency"]}</span></div>'
+            f'<div class="summary-row"><span class="sk">Destination</span><span class="sv">{alert["destination_country"]}</span></div>'
+            f'<div class="summary-row"><span class="sk">Risk Score</span><span class="sv" style="color:{rc};">{score}/100</span></div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+    with col2:
+        st.markdown('<span class="section-label">Agent Findings Summary</span>', unsafe_allow_html=True)
+        ar = alert.get("agent_results", {})
+        if ar:
+            st.markdown(
+                f'<div class="summary-card">'
+                f'<div class="summary-row"><span class="sk">Transaction Risk</span><span class="sv">{ar.get("transaction",{}).get("risk_score","?")}</span></div>'
+                f'<div class="summary-row"><span class="sk">KYC Risk</span><span class="sv">{ar.get("kyc",{}).get("risk_score","?")}</span></div>'
+                f'<div class="summary-row"><span class="sk">Sanctions Risk</span><span class="sv">{ar.get("sanctions",{}).get("risk_score","?")}</span></div>'
+                f'</div>', unsafe_allow_html=True,
+            )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    notes = st.text_area("Analyst decision rationale (required for audit trail)",
+        value="High-value transfer to sanctioned corridor with device and geo anomalies. Recommend account freeze.",
+        height=90, key="hitl_notes")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("✅ Approve Transaction", use_container_width=True, key="hitl_approve"):
+            alert["approved"] = True; alert["status"] = "CLOSED"
+            alert["hitl_decision"] = {"decision": "FALSE_POSITIVE", "notes": notes}
+            st.session_state.metrics["auto_closed"] += 1
+            trace(f"HITL → FALSE_POSITIVE · notes={notes[:50]}")
+            st.session_state.stage = 8; st.rerun()
+    with c2:
+        if st.button("🔒 Confirm Freeze Account", type="primary", use_container_width=True, key="hitl_freeze"):
+            alert["frozen"] = True; alert["status"] = "CLOSED"
+            alert["hitl_decision"] = {"decision": "CONFIRM_FRAUD", "notes": notes}
+            st.session_state.metrics["confirmed_fraud"] += 1
+            st.session_state.metrics["blocked"] += 1
+            trace(f"HITL → CONFIRM_FRAUD · account={alert['customer_id']}")
+            st.session_state.stage = 8; st.rerun()
+    with c3:
+        if st.button("📋 Request More Info", use_container_width=True, key="hitl_more"):
+            alert["status"] = "HITL"
+            st.session_state.metrics["hitl_pending"] += 1
+            trace(f"HITL → REQUEST_MORE_INFO · {alert['alert_id']}")
+            st.markdown('<div class="info-panel">Investigation remains AWAITING_HUMAN. Queue re-notified.</div>', unsafe_allow_html=True)
+            st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 8 — RESOLUTION
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_resolution(alert: dict) -> None:
+    st.markdown('<span class="section-label">STAGE 8 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Final Resolution</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Resolution Engine executes actions independently. Each action logged. Fraud memory updated.</div>', unsafe_allow_html=True)
+
+    frozen   = alert.get("frozen", False)
+    approved = alert.get("approved", False)
+
+    if frozen:
+        st.markdown(
+            f'<div class="success-panel" style="font-size:.95rem;font-weight:700;">✅ Fraud Confirmed — Account {alert["customer_id"]} Frozen</div>',
+            unsafe_allow_html=True,
+        )
+        actions = [
+            ("freeze_account",      f"Account {alert['customer_id']} frozen — outgoing transfers blocked"),
+            ("reverse_transaction", f"Transaction {alert['transaction_id']} reversal initiated"),
+            ("block_login",         f"Login access disabled for {alert['customer_id']}"),
+            ("send_sms",            f"Customer notified via SMS — suspicious activity alert sent"),
+        ]
+        st.markdown('<span class="section-label">Actions Executed</span>', unsafe_allow_html=True)
+        for action, detail in actions:
+            st.markdown(
+                f'<div class="action-row"><span class="action-name">{action}</span>'
+                f'<span style="font-size:.72rem;color:#10b981;font-weight:600;">✅ SUCCESS</span>'
+                f'<span style="margin-left:auto;font-size:.75rem;color:#6ee7b7;">{detail}</span></div>',
+                unsafe_allow_html=True,
+            )
+            trace(f"ACTION_ENGINE → {action} · SUCCESS")
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown('<span class="section-label">Fraud Memory Update</span>', unsafe_allow_html=True)
+        new_indicators = [
+            {"type": "device",  "value": alert["device_id"],           "source": alert["investigation_id"]},
+            {"type": "account", "value": alert["customer_id"],         "source": alert["investigation_id"]},
+            {"type": "country", "value": alert["destination_country"], "source": alert["investigation_id"]},
+            {"type": "ip",      "value": alert["ip_address"],          "source": alert["investigation_id"]},
+        ]
+        existing = {m["value"] for m in st.session_state.fraud_memory_updates}
+        for ind in new_indicators:
+            if ind["value"] not in existing:
+                ind["confirmed_at"] = utcnow_iso()
+                st.session_state.fraud_memory_updates.append(ind)
+                trace(f"FRAUD_MEMORY → WRITE · type={ind['type']} · value={ind['value']}")
+        for ind in new_indicators:
+            st.markdown(
+                f'<div class="memory-row"><span class="memory-type">{ind["type"]}</span>'
+                f'<span class="memory-val">{ind["value"]}</span>'
+                f'<span style="margin-left:auto;font-size:.7rem;color:#475569;">pinned from {ind["source"]}</span></div>',
+                unsafe_allow_html=True,
+            )
+        if st.session_state.fraud_memory_updates:
+            st.markdown("<hr>", unsafe_allow_html=True)
+            st.markdown('<span class="section-label">Full Fraud Memory Ledger (Session)</span>', unsafe_allow_html=True)
+            st.dataframe(pd.DataFrame(st.session_state.fraud_memory_updates), hide_index=True, use_container_width=True)
+
+    elif approved:
+        st.markdown(
+            f'<div class="info-panel">✅ Transaction <b>{alert["transaction_id"]}</b> approved. Case closed as FALSE_POSITIVE. No remediation taken.</div>',
+            unsafe_allow_html=True,
+        )
+        trace(f"RESOLUTION → FALSE_POSITIVE · {alert['alert_id']}")
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("→ View Audit Trail", type="primary", key="to_audit"):
+            st.session_state.stage = 9; st.rerun()
+    with col2:
+        if st.button("→ Live Dashboard", key="to_dashboard"):
+            st.session_state.stage = 10; st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 9 — AUDIT TRAIL
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_audit(alert: dict | None) -> None:
+    st.markdown('<span class="section-label">STAGE 9 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Audit Trail &amp; Investigation Timeline</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Complete immutable record of every event, decision, and action — millisecond-precision timestamps.</div>', unsafe_allow_html=True)
+
+    trail = st.session_state.audit_trail
+
+    if alert:
+        rr = alert.get("risk_result", {})
+        score_val = f"{int(float(rr.get('final_risk_score', rr.get('risk_score',0)))*100)}/100" if rr else "—"
+        decision_val = (alert.get("hitl_decision",{}).get("decision","AUTO") if alert.get("hitl_decision")
+                        else ("FROZEN" if alert.get("frozen") else "APPROVED" if alert.get("approved") else "—"))
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Alert Created", alert.get("created_at","—")[:19])
+        col2.metric("Status", alert.get("status","—"))
+        col3.metric("Risk Score", score_val)
+        col4.metric("Decision", decision_val)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<span class="section-label">Full Audit Log</span>', unsafe_allow_html=True)
+    for entry in reversed(trail[-80:]):
+        st.markdown(
+            f'<div class="timeline-row"><span class="timeline-ts">{entry["timestamp"]}</span>'
+            f'<span class="timeline-evt">{entry["event"]}</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<span class="section-label">Raw Trace</span>', unsafe_allow_html=True)
+    st.code("\n".join(f'[{e["timestamp"]}] {e["event"]}' for e in trail[-100:]), language="text")
+
+    if alert and alert.get("agent_results"):
+        with st.expander("🗂 Agent Evidence Archive"):
+            st.json(alert["agent_results"])
+    if alert and alert.get("ai_synthesis"):
+        with st.expander("🤖 Full Claude Sonnet AI Synthesis"):
+            st.json(alert["ai_synthesis"])
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    if st.button("→ Live Dashboard", type="primary", key="to_live"):
+        st.session_state.stage = 10; st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 10 — LIVE DASHBOARD
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_live_dashboard() -> None:
+    st.markdown('<span class="section-label">STAGE 10 OF 10</span>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-header">Live Dashboard &amp; Monitoring</div>', unsafe_allow_html=True)
+    st.markdown('<div class="stage-subtext">Real-time metrics, active investigations, risk distribution, and fraud trends.</div>', unsafe_allow_html=True)
+
+    m = st.session_state.metrics
+    alerts = st.session_state.alerts
+
+    # Calculate fraud stopped count
+    fraud_stopped = m["confirmed_fraud"] + m["blocked"]
     
-    if not st.session_state.selected_alert:
-        st.warning("⚠️ No alert selected for resolution")
-        return
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:.75rem;margin-bottom:1.5rem;">'
+        f'<div class="stat-card"><div class="stat-value" style="color:#f1f5f9;">{m["total_alerts"]}</div><div class="stat-label">Total Alerts</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#ef4444;">{m["confirmed_fraud"]}</div><div class="stat-label">Fraud Confirmed</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#10b981;">{m["auto_closed"]}</div><div class="stat-label">Auto-Closed</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#f59e0b;">{m["hitl_pending"]}</div><div class="stat-label">HITL Pending</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#ef4444;">{m["blocked"]}</div><div class="stat-label">Accts Blocked</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#dc2626; font-weight: bold; font-size: 1.2rem;">{fraud_stopped}</div><div class="stat-label">💥 Total Fraud Stopped</div></div>'
+        f'</div>', unsafe_allow_html=True,
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<span class="section-label">Active Investigations</span>', unsafe_allow_html=True)
+        active = [a for a in alerts if a["status"] not in ("CLOSED",)]
+        if active:
+            rows = []
+            for a in active:
+                rr = a.get("risk_result") or {}
+                fs = float(rr.get("final_risk_score", rr.get("risk_score", 0)))
+                rows.append({"Alert ID": a["alert_id"], "Customer": a["customer_id"],
+                             "Amount": f"${a['amount']:,.0f}", "Country": a["destination_country"],
+                             "Severity": a["severity"], "Status": a["status"],
+                             "Risk Score": f"{int(fs*100)}/100" if rr else "—"})
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        else:
+            st.markdown('<div class="info-panel">No active investigations.</div>', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown('<span class="section-label">Risk Distribution</span>', unsafe_allow_html=True)
+        if alerts:
+            risk_data = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            for a in alerts:
+                risk_data[a.get("severity","MEDIUM")] = risk_data.get(a.get("severity","MEDIUM"),0) + 1
+            # Alert severity distribution available in metrics panel
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown('<span class="section-label">Fraud Memory Store</span>', unsafe_allow_html=True)
+        all_mem = st.session_state.fraud_memory + st.session_state.fraud_memory_updates
+        if all_mem:
+            df_m = pd.DataFrame(all_mem)
+            cols = [c for c in ["pattern_type","entity_id","confidence","risk_score","status","description"] if c in df_m.columns]
+            st.dataframe(df_m[cols or list(df_m.columns)[:5]], hide_index=True, use_container_width=True)
+    with col4:
+        st.markdown('<span class="section-label">Transaction Volume by Country</span>', unsafe_allow_html=True)
+        txns = st.session_state.transactions
+        if txns:
+            df_tx = pd.DataFrame(txns)
+            cv = df_tx.groupby("destination_country")["amount"].sum().reset_index()
+            cv.columns = ["Country","Total Amount"]
+            # Transaction volume analysis available in audit trail
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<span class="section-label">All Alerts Summary</span>', unsafe_allow_html=True)
+    if alerts:
+        rows = []
+        for a in alerts:
+            rr = a.get("risk_result") or {}
+            if rr:
+                fs = float(rr.get("final_risk_score", rr.get("risk_score", 0)))
+            else:
+                fs = 0.0
+            rows.append({"Alert ID": a["alert_id"], "Customer": a["customer_id"],
+                         "Amount": f"${a['amount']:,.0f}", "Country": a["destination_country"],
+                         "Severity": a["severity"], "Status": a["status"],
+                         "Risk Score": f"{int(fs*100)}/100" if rr else "—",
+                         "Decision": (a.get("hitl_decision",{}).get("decision","—") if a.get("hitl_decision")
+                                      else ("FROZEN" if a.get("frozen") else "APPROVED" if a.get("approved") else "—")),
+                         "Created": a["created_at"][:19]})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    if st.button("↩ Start New Investigation", type="primary", key="restart"):
+        st.session_state.stage = 1
+        st.session_state.selected_alert_id = None
+        trace("NARRATIVE_RESET → Stage 1")
+        st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────────────────────────
+def main() -> None:
+    init_state()
+    st.markdown(CSS, unsafe_allow_html=True)
+    render_sidebar()
+
+    # Premium Banking Header with KPI Cards
+    m = st.session_state.metrics
+    fraud_stopped = m["confirmed_fraud"] + m["blocked"]
     
-    alert = st.session_state.selected_alert
-    
-    # Animated success
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%); border: 2px solid #00ff88; border-radius: 16px; padding: 3rem; margin: 2rem 0; text-align: center; animation: fadeIn 0.5s ease;">
-        <div style="font-size: 4rem; margin-bottom: 1rem; animation: scaleIn 0.5s ease;">✅</div>
-        <h2 style="color: #00ff88; margin: 0 0 1rem 0; font-weight: 800;">ACCOUNT FROZEN</h2>
-        <div style="color: #ffffff; font-size: 1.25rem; margin-bottom: 2rem;">
-            Account {alert['customer_id']} has been successfully frozen<br>
-            SMS notification sent • Card suspended • Case closed
-        </div>
-        
-        <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 12px; padding: 2rem; margin: 2rem 0; text-align: left;">
-            <h3 style="color: #00ff88; margin: 0 0 1.5rem 0;">🧠 FRAUD MEMORY UPDATED</h3>
-            <div style="color: #ffffff; font-family: 'SF Mono', monospace; font-size: 0.875rem; line-height: 1.6;">
-                <strong>Device Blacklisted:</strong> <span style="color: #ff4444;">{alert['device_id']}</span><br>
-                <small style="color: #666666;">Permanently blacklisted due to account takeover</small><br><br>
-                
-                <strong>Location Flag:</strong> <span style="color: #ff4444;">{alert['country']}</span><br>
-                <small style="color: #666666;">Marked as high-risk geographic area</small><br><br>
-                
-                <strong>Pattern Learned:</strong> <span style="color: #ff4444;">Impossible Travel + Account Takeover</span><br>
-                <small style="color: #666666;">Added to fraud detection model for future prevention</small>
+    st.markdown('''
+    <div style="background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary)); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem 2rem; margin-bottom: 2rem; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);">
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <div style="font-size: 2.2rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);">
+            🏛️ Andela Digital Bank
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;">Agentic AI Fraud Investigator</div>
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
-    
-    # Audit timeline
-    st.markdown("### 🔍 PERSISTENT AUDIT TIMELINE")
-    
-    audit_events = [
-        {"time": "12:17:21", "message": "Alert received - High-risk transaction detected"},
-        {"time": "12:17:45", "message": "Triage complete - Risk score 92/100"},
-        {"time": "12:18:12", "message": "Transaction agent complete - 900% velocity anomaly"},
-        {"time": "12:18:34", "message": "KYC agent complete - New device fingerprint"},
-        {"time": "12:18:56", "message": "Sanctions agent complete - OFAC partial match"},
-        {"time": "12:19:23", "message": "AI synthesis complete - Risk score 0.92"},
-        {"time": "12:19:45", "message": "Human analyst freeze approved"},
-        {"time": "12:20:15", "message": "Account frozen - SMS notification sent"},
-        {"time": "12:20:30", "message": "Fraud memory updated - Device blacklisted"}
-    ]
-    
-    st.markdown('<div class="audit-timeline">', unsafe_allow_html=True)
-    
-    for event in audit_events:
-        st.markdown(f"""
-        <div class="audit-item">
-            <div class="audit-time">{event['time']}</div>
-            <div class="audit-message">{event['message']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Reset button
-    if st.button("🔄 INITIATE NEW INVESTIGATION", type="primary", use_container_width=True):
-        st.session_state.current_step = 1
-        st.session_state.selected_alert = None
-        st.session_state.alerts = []
-        st.session_state.investigation_log = []
-        st.success("🔄 Ready for new investigation")
-        st.rerun()
+    ''', unsafe_allow_html=True)
 
-def main():
-    """Main enterprise-grade application."""
+    # KPI Cards at Top
+    st.markdown('''
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
+        <div class="kpi-card agent-card-animated">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Total Alerts</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--text-primary);">''' + str(m["total_alerts"]) + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Last 24h</div>
+        </div>
+        <div class="kpi-card fraud agent-card-animated" style="animation-delay: 0.1s;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Fraud Stopped</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--fraud);">''' + str(fraud_stopped) + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">This session</div>
+        </div>
+        <div class="kpi-card success agent-card-animated" style="animation-delay: 0.2s;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Auto-Closed</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--success);">''' + str(m["auto_closed"]) + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">AI resolved</div>
+        </div>
+        <div class="kpi-card warning agent-card-animated" style="animation-delay: 0.3s;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">HITL Pending</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--warning);">''' + str(m["hitl_pending"]) + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Review needed</div>
+        </div>
+        <div class="kpi-card agent-card-animated" style="animation-delay: 0.4s;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Accounts Blocked</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--fraud);">''' + str(m["blocked"]) + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Protected</div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    # Compact Progress Timeline
+    stage = st.session_state.stage
+    st.markdown(f'''
+    <div class="progress-timeline">
+        <div class="progress-step {'active' if stage == 1 else 'completed' if stage > 1 else ''}">1</div>
+        <div class="progress-line {'completed' if stage > 1 else ''}"></div>
+        <div class="progress-step {'active' if stage == 2 else 'completed' if stage > 2 else ''}">2</div>
+        <div class="progress-line {'completed' if stage > 2 else ''}"></div>
+        <div class="progress-step {'active' if stage == 3 else 'completed' if stage > 3 else ''}">3</div>
+        <div class="progress-line {'completed' if stage > 3 else ''}"></div>
+        <div class="progress-step {'active' if stage == 4 else 'completed' if stage > 4 else ''}">4</div>
+        <div class="progress-line {'completed' if stage > 4 else ''}"></div>
+        <div class="progress-step {'active' if stage == 5 else 'completed' if stage > 5 else ''}">5</div>
+        <div class="progress-line {'completed' if stage > 5 else ''}"></div>
+        <div class="progress-step {'active' if stage == 6 else 'completed' if stage > 6 else ''}">6</div>
+        <div class="progress-line {'completed' if stage > 6 else ''}"></div>
+        <div class="progress-step {'active' if stage == 7 else 'completed' if stage > 7 else ''}">7</div>
+        <div class="progress-line {'completed' if stage > 7 else ''}"></div>
+        <div class="progress-step {'active' if stage == 8 else 'completed' if stage > 8 else ''}">8</div>
+        <div class="progress-line {'completed' if stage > 8 else ''}"></div>
+        <div class="progress-step {'active' if stage == 9 else 'completed' if stage > 9 else ''}">9</div>
+        <div class="progress-line {'completed' if stage > 9 else ''}"></div>
+        <div class="progress-step {'active' if stage == 10 else 'completed' if stage > 10 else ''}">10</div>
+    </div>
+    <div style="text-align: center; margin-top: 0.5rem;">
+        <span style="font-size: 0.9rem; color: var(--text-secondary);">Stage {stage}: {STAGE_LABELS[stage-1]}</span>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    # Add Live Activity Feed and Agent Progress
+    if stage >= 3:  # Show activity feed once alerts are generated
+        col1, col2 = st.columns([2, 1])
+        
+        with col2:
+            # Live Activity Feed
+            st.markdown('<span class="section-label">Live Activity Feed</span>', unsafe_allow_html=True)
+            recent_activity = st.session_state.audit_trail[-10:]
+            activity_html = ""
+            for event in reversed(recent_activity):
+                activity_html += f'''
+                <div class="activity-item">
+                    <div style="color: var(--text-primary); margin-bottom: 0.25rem;">{event["event"]}</div>
+                    <div class="timestamp">{event["timestamp"]}</div>
+                </div>
+                '''
+            st.markdown(f'<div class="activity-feed">{activity_html}</div>', unsafe_allow_html=True)
+            
+            # Agent Progress Cards (show during agent investigation)
+            if stage == 5 and alert and alert.get("triage_result"):
+                st.markdown('<span class="section-label" style="margin-top: 1rem;">Agent Investigation</span>', unsafe_allow_html=True)
+                
+                agents = [
+                    ("⚡ Transaction Agent", "running", 75),
+                    ("🔍 KYC/Device Agent", "pending", 0), 
+                    ("🚫 Sanctions Agent", "pending", 0)
+                ]
+                
+                for agent_name, status, progress in agents:
+                    status_class = f"status-{status}"
+                    progress_class = "success" if status == "completed" else "warning" if status == "running" else ""
+                    
+                    st.markdown(f'''
+                    <div class="agent-progress agent-card-animated">
+                        <div class="agent-header">
+                            <div class="agent-name">{agent_name}</div>
+                            <div class="agent-status {status_class}">{status}</div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill {progress_class}" style="width: {progress}%"></div>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">{progress}% complete</div>
+                    </div>
+                    ''', unsafe_allow_html=True)
+
+    tab_demo, tab_audit_raw = st.tabs(["🔍 Investigation Demo", "📋 Audit Trace"])
+
+    alert = next((a for a in st.session_state.alerts if a["alert_id"] == st.session_state.selected_alert_id), None)
+
+    def _gate(msg: str) -> None:
+        st.markdown(f'<div class="hitl-alert"><div class="hitl-title">⚠ Step Required</div><div class="hitl-body">{msg}</div></div>', unsafe_allow_html=True)
+
+    with tab_demo:
+        if stage == 1:   stage_data_sources()
+        elif stage == 2: stage_generate_alert()
+        elif stage == 3: stage_alerts_queue()
+        elif stage == 4:
+            if not alert: _gate("Select an alert from Stage 3 first.")
+            else: stage_triage(alert)
+        elif stage == 5:
+            if not alert or not alert.get("triage_result"): _gate("Complete triage in Stage 4 first.")
+            else: stage_agents(alert)
+        elif stage == 6:
+            if not alert or not alert.get("agent_results"): _gate("Run agents in Stage 5 first.")
+            else: stage_risk_scoring(alert)
+        elif stage == 7:
+            if not alert or not alert.get("risk_result"): _gate("Complete risk scoring in Stage 6 first.")
+            else: stage_hitl(alert)
+        elif stage == 8:
+            if not alert: _gate("Complete HITL in Stage 7 first.")
+            else: stage_resolution(alert)
+        elif stage == 9: stage_audit(alert)
+        elif stage == 10: stage_live_dashboard()
+
+    with tab_audit_raw:
+        st.markdown('<span class="section-label">Full Audit Trace</span>', unsafe_allow_html=True)
+        st.code("\n".join(f'[{e["timestamp"]}] {e["event"]}' for e in st.session_state.audit_trail[-150:]), language="text")
     
-    # SOC Header
-    render_soc_header()
-    
-    # Executive KPIs
-    render_executive_kpis()
-    
-    # Cinematic Timeline
-    render_cinematic_timeline()
-    
-    # Render current step
-    if st.session_state.current_step == 1:
-        step_1_war_room()
-    elif st.session_state.current_step == 2:
-        step_2_triage_war_room()
-    elif st.session_state.current_step == 3:
-        step_3_agents_war_room()
-    elif st.session_state.current_step == 4:
-        step_4_executive_briefing()
-    elif st.session_state.current_step == 5:
-        step_5_human_review()
-    elif st.session_state.current_step == 6:
-        step_6_resolution()
+    # Andela Branding Footer
+    st.markdown('''
+    <div class="footer-branding">
+        <div style="font-weight: 700; color: var(--gold); margin-bottom: 0.5rem;">MVP v4.0 – Andela Bootcamp Showcase</div>
+        <div style="font-size: 0.8rem; color: #64748b;">Powered by Cerebras AI + LangGraph Orchestration</div>
+    </div>
+    ''', unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     main()

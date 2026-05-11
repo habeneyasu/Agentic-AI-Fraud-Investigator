@@ -1,420 +1,319 @@
 # Agentic AI Fraud Investigator
 
-An MVP fraud investigation system combining rule-based detection with AI-powered analysis for near real-time fraud detection and risk assessment.
+> **Andela AI Engineering Bootcamp — Capstone Demo**  
+> A production-oriented fraud operations platform for Andela Digital Bank.
 
-## 💡 Motivation
+The system automates the full fraud investigation lifecycle — from alert intake through parallel AI evidence collection, hybrid risk scoring, human review, and remediation — using multiple AI agents coordinated by a LangGraph orchestration engine.
 
-Traditional fraud systems rely heavily on static rules and struggle to detect evolving fraud patterns. This project explores how agentic AI workflows and LLM reasoning can enhance fraud investigation while maintaining explainability through rule-based scoring.
-
-## 🎯 Current MVP Scope
-
-### What's Implemented Today
-- ✅ **Hybrid Risk Scoring**: Rule-based + AI context with adaptive weighting
-- ✅ **Multi-Provider LLM Support**: Cerebras and Gemini with async architecture
-- ✅ **LangGraph Workflow**: Automated investigation orchestration
-- ✅ **REST API**: FastAPI endpoints for fraud detection
-- ✅ **Low-latency Fraud Scoring**: Transaction analysis with immediate response
-- ✅ Structured JSON-based LLM Responses
-
-### What's Not Implemented Yet
-- ❌ **SAR Filing**: Automated suspicious activity reporting
-- ❌ **Live Sanctions APIs**: Real-time watchlist integration
-- ❌ **Dynamic AI Learning**: Model training on new fraud patterns
-- ❌ **Advanced Monitoring**: Prometheus/Grafana dashboards
-- ❌ **Streaming Pipelines**: Real-time data ingestion
-
-## 🏗️ Architecture Overview
-
-```
-┌─────────────────────────────────────────────────┐
-│                 FRAUD DETECTION SYSTEM                │
-├─────────────────────────────────────────────────┤
-│  API Layer (FastAPI)                                │
-│  • POST /api/v1/alerts/trigger                      │
-│  • POST /api/v1/scoring/calculate                  │
-│  • GET /api/v1/investigations/{case_id}           │
-├─────────────────────────────────────────────────┤
-│  Workflow Layer (LangGraph)                            │
-│  • Alert Triage → Analysis → Investigation               │
-│  • State Management & Orchestration                     │
-├─────────────────────────────────────────────────┤
-│  Detection Layer                                       │
-│  • Hybrid Scoring Engine (Rules + AI)                   │
-│  • Multi-Provider LLM Client (Cerebras, Gemini)          │
-│  • Risk Factor Analysis                                   │
-├─────────────────────────────────────────────────┤
-│  Data Layer                                             │
-│  • PostgreSQL (Transaction Storage)                        │
-│  • Redis (Cache & Queue)                                 │
-└─────────────────────────────────────────────────┘
-```
-
-## 🧠 Design Principles
-
-- **Async-first architecture**: Non-blocking I/O for high-throughput processing
-- **Hybrid AI + deterministic scoring**: Combines rule-based reliability with AI contextual analysis
-- **Provider-agnostic LLM integration**: Clean abstraction for Cerebras, Gemini, OpenAI
-- **Explainable fraud analysis**: Transparent risk factors and decision logic
-- **Graceful fallback mechanisms**: Robust error handling with rule-based backup
-
-## 🔄 Simple Workflow
-
-```
-Alert Triggered → Risk Scoring → Investigation Decision → Action Required
-     ↓                    ↓                    ↓                    ↓
-  Transaction          Hybrid Score          Generate Case        Block/Allow
-  Analysis              (Rules + AI)          Recommendations   Transaction
-```
-
-## 🛠️ Tech Stack
-
-### Core Technologies
-- **Backend**: FastAPI with async support
-- **Workflow**: LangGraph for investigation orchestration
-- **AI/LLM**: Cerebras and Gemini integration
-- **Database**: PostgreSQL for transaction storage
-- **Cache**: Redis for performance optimization
-
-### Key Libraries
-- **LangChain**: LLM abstraction and prompts
-- **LangSmith**: AI observability and tracking
-- **Pydantic**: Data validation and settings
-- **Tenacity**: Retry logic with exponential backoff
-- **httpx**: Async HTTP client for LLM calls
-
-## 🚀 Quick Start
-
-### Prerequisites
-```bash
-# Clone repository
-git clone https://github.com/habeneyasu/Agentic-AI-Fraud-Investigator.git
-cd Agentic-AI-Fraud-Investigator
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your API keys
-```
-
-### Environment Setup
-```bash
-# Required API Keys
-CEREBRAS_API_KEY=your_cerebras_key
-GEMINI_API_KEY=your_gemini_key
-
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/fraud_investigator
-REDIS_URL=redis://localhost:6379
-
-# Scoring Configuration
-TRANSACTION_AMOUNT_THRESHOLD=10000.0
-RISK_SCORE_THRESHOLD=0.7
-```
-
-### Running the System
-```bash
-# Development server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# Production with Docker
-docker-compose up -d
-```
-
-## 📊 Usage Examples
-
-### Fraud Detection
-```python
-import asyncio
-from app.graph.scoring import calculate_risk_score, ScoringMode
-
-async def detect_fraud():
-    transaction_event = {
-        'amount': 15000,
-        'sender': 'user123',
-        'receiver': 'merchant456',
-        'new_device': True,
-        'high_risk_country': False,
-        'failed_attempts': 0
-    }
-    
-    # Hybrid scoring (default)
-    result = await calculate_risk_score(transaction_event)
-    print(f"Risk Score: {result.risk_score:.3f}")
-    print(f"Risk Level: {result.risk_level}")
-    print(f"Factors: {[f.description for f in result.factors]}")
-    
-    # Rules-only scoring
-    rules_result = await calculate_risk_score(transaction_event, ScoringMode.RULES_ONLY)
-    
-    # AI-only scoring
-    ai_result = await calculate_risk_score(transaction_event, ScoringMode.AI_ONLY)
-
-asyncio.run(detect_fraud())
-```
-
-### LLM Client Integration
-```python
-from app.llm.client import LLMClient, LLMProvider
-
-# Initialize client
-client = LLMClient(LLMProvider.CEREBRAS)
-
-# Analyze transaction
-transaction_data = {'amount': 5000, 'sender': 'user123', 'receiver': 'merchant456'}
-context = {'customer_risk_profile': 'medium', 'previous_alerts': 2}
-
-result = await client.analyze_transaction(transaction_data, context)
-print(f"Analysis: {result['response']}")
-```
-
-### Realistic Response Example
-```json
-{
-  "risk_score": 0.82,
-  "risk_level": "HIGH",
-  "factors": [
-    {
-      "factor": "new_device",
-      "description": "New device detected"
-    },
-    {
-      "factor": "large_amount", 
-      "description": "Transaction amount exceeds threshold"
-    }
-  ],
-  "recommended_action": "Manual review required"
-}
-```
-
-## 📋 Risk Scoring
-
-### Score Interpretation
-| Score Range | Risk Level | Action Required |
-|-------------|-------------|-----------------|
-| 0.80-1.00 | CRITICAL    | Immediate block, investigation |
-| 0.60-0.79 | HIGH        | Enhanced monitoring, manual review |
-| 0.40-0.59 | MEDIUM      | Standard monitoring, documentation |
-| 0.20-0.39 | LOW         | Basic monitoring, periodic review |
-| 0.00-0.19 | MINIMAL     | Normal processing, no action |
-
-### Risk Categories
-- **Transaction**: Amount anomalies, timing patterns, frequency issues
-- **Device**: New/unknown devices, device fingerprinting
-- **Geographic**: High-risk countries, unusual locations
-- **Sanctions**: Watchlist matches, PEP entities
-- **Behavior**: Failed attempts, unusual timing, high frequency
-- **AI Context**: LLM-powered contextual analysis
-
-## 📐 Screenshots & Architecture
-
-### Workflow Diagram
-```
-┌─────────────────────────────────────────┐
-│           FRAUD WORKFLOW           │
-├─────────────────────────────────────────┤
-│  Alert → Analysis → Scoring → Decision → Action   │
-├─────────────────────────────────────────┤
-│  LangGraph Orchestration                        │
-│  • State Management                               │
-│  • Error Handling                                   │
-│  • Parallel Processing                               │
-└─────────────────────────────────────────┘
-```
-
-### API Documentation
-- Swagger UI at `http://localhost:8000/docs`
-- Interactive API testing
-- Auto-generated request/response examples
-
-## 🧪 Configuration
-
-### Scoring Rules
-```python
-# Transaction rules
-TRANSACTION_AMOUNT_THRESHOLD = 10000.0
-TRANSACTION_WEIGHT = 0.3
-
-# Device rules
-NEW_DEVICE_PENALTY = 0.2
-UNKNOWN_DEVICE_PENALTY = 0.3
-
-# Geographic rules
-HIGH_RISK_COUNTRY_PENALTY = 0.4
-UNUSUAL_LOCATION_PENALTY = 0.2
-
-# Sanctions rules
-SANCTIONED_ENTITY_PENALTY = 0.8
-PEP_ENTITY_PENALTY = 0.5
-
-# Behavior rules
-FAILED_LOGIN_PENALTY = 0.15
-UNUSUAL_TIMING_PENALTY = 0.1
-HIGH_FREQUENCY_PENALTY = 0.2
-```
-
-### Adaptive Hybrid Scoring
-```python
-# Dynamic weighting based on AI confidence
-if ai_confidence < 0.5:
-    rule_weight = 0.8  # Trust proven rules more
-    ai_weight = 0.2
-elif ai_confidence > 0.9:
-    rule_weight = 0.4  # Trust AI insights more
-    ai_weight = 0.6
-else:
-    rule_weight = 0.6  # Balanced approach
-    ai_weight = 0.4
-```
-
-## 📈 API Documentation
-
-### Core Endpoints
-
-#### POST /api/v1/alerts/trigger
-Trigger fraud investigation workflow
-```json
-{
-  "transaction_id": "txn_123456",
-  "amount": 15000.00,
-  "currency": "USD",
-  "customer_id": "cust_789",
-  "alert_type": "high_amount"
-}
-```
-
-#### POST /api/v1/scoring/calculate
-Calculate risk score for event
-```json
-{
-  "event_type": "transaction",
-  "amount": 25000.00,
-  "sender": "user123",
-  "receiver": "merchant456",
-  "new_device": true,
-  "high_risk_country": false
-}
-```
-
-#### GET /api/v1/investigations/{case_id}
-Get investigation details and recommendations
-
-## 🔒 Security Features
-
-### Input Validation
-- Pydantic schemas for all API inputs
-- SQL injection protection
-- Rate limiting per endpoint
-
-### Authentication
-- JWT-based authentication
-- API key management
-- Role-based access control
-
-## ⚠️ Current Limitations
-
-- Uses prompt-engineered LLM analysis instead of trained fraud models
-- No live sanctions provider integration yet
-- Limited historical behavioral analysis
-- Optimized for demonstration and experimentation
-- LLM outputs may vary depending on provider response quality
-
-## 🚀 Deployment
-
-### Docker Configuration
-```yaml
-version: '3.8'
-services:
-  app:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
-    depends_on:
-      - postgres
-      - redis
-  
-  postgres:
-    image: postgres:15
-    environment:
-      - POSTGRES_DB=fraud_investigator
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-  
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-```
-
-## 📁 Project Structure
-
-```
-app/
-├── api/           # FastAPI endpoints
-├── core/          # Config, logging, security
-├── graph/         # LangGraph workflows
-├── llm/           # LLM providers and prompts
-├── models/        # Pydantic schemas
-├── repositories/  # Database access layer
-├── services/      # Business logic
-└── tests/         # Unit and integration tests
-```
-
-## 🔮 Future Enhancements
-
-### Phase 1: Core Features (Next 3 months)
-- 🔄 **SAR Filing**: Automated suspicious activity reporting
-- 🔄 **Live Sanctions APIs**: Real-time watchlist integration
-- 🔄 **Enhanced Monitoring**: Basic metrics and alerting
-
-### Phase 2: Intelligence (Next 6 months)
-- 🧠 **Dynamic AI Learning**: Model training on fraud patterns
-- 📊 **Advanced Analytics**: Pattern recognition and trend analysis
-- 🔗 **External Integrations**: Third-party threat intelligence
-
-### Phase 3: Scale (Next 12 months)
-- 🌐 **Microservices Architecture**: Service decomposition
-- 📈 **Streaming Pipelines**: Real-time data processing
-- 🔧 **Advanced Features**: Case management, collaboration tools
-
-## 🛠️ Local Development
-
-```bash
-# Setup development environment
-python -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# Run tests
-pytest
-
-# Format code
-black .
-
-# Lint code
-ruff check .
-```
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Documentation**: [Project Wiki](https://github.com/habeneyasu/Agentic-AI-Fraud-Investigator/wiki)
-- **Issues**: [GitHub Issues](https://github.com/habeneyasu/Agentic-AI-Fraud-Investigator/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/habeneyasu/Agentic-AI-Fraud-Investigator/discussions)
+The core architectural principle: **deterministic business controls** (triage rules, schema validation, retries, state management) are strictly separated from **probabilistic AI reasoning** (contextual fraud analysis via Cerebras + Gemini). AI operates within strict operational constraints and every decision is auditable and explainable.
 
 ---
 
-**Built to explore agentic AI workflows for fraud detection and investigation.**
+## Demo Scenarios
+
+**Scenario A — "The Midnight Mule"**  
+A $15,000 offshore transfer at 2:30 AM from a student account. The system flags it P1_CRITICAL, runs parallel agents, scores risk at 92/100, pauses for human approval, and executes full remediation in under 4 minutes.
+
+**Scenario B — "Legitimate Tuition Payment"**  
+A $2,500 tuition payment to a known beneficiary. The system auto-clears it in under 10 seconds with risk score 18 — no analyst involvement.
+
+**Resilience Demo**  
+The Sanctions Agent is intentionally timed out mid-demo. The workflow retries, reduces confidence 0.95 → 0.70, and completes with partial evidence — demonstrating graceful degradation.
+
+---
+
+## Architecture
+
+```
+POST /v1/alerts
+      │
+      ▼
+Alert Intake & Idempotency
+      │
+      ▼
+Triage Engine (deterministic rules — no LLM)
+      │
+      ├── AUTO_CLOSE (amount < $100)
+      ├── P3_LOW (rule-only scoring)
+      └── P1/P2 → LangGraph Orchestrator
+                        │
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+  Transaction       KYC Agent    Sanctions
+    Agent          (device/geo)    Agent
+          └─────────────┼─────────────┘
+                        ▼
+               Risk Scoring Engine
+               (rules + Cerebras/Gemini)
+                        │
+               Decision Engine (policy)
+                        │
+              ┌─────────┴─────────┐
+              ▼                   ▼
+        AUTO_APPROVE           HITL Review
+              │                   │
+              └─────────┬─────────┘
+                        ▼
+               Resolution Engine
+               (freeze · reverse · block · SMS)
+                        │
+               Audit Trail + Fraud Memory
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| API | FastAPI 0.111 (Python 3.11) |
+| Orchestration | LangGraph 0.1.5 |
+| AI — Fast scoring | Cerebras `llama3.1-70b` |
+| AI — Deep reasoning | Google Gemini 1.5 Flash |
+| Schema validation | Pydantic v2 |
+| Async HTTP | httpx |
+| Dashboard | Streamlit 1.35 |
+| Logging | structlog |
+| Package manager | uv |
+
+---
+
+## Project Structure
+
+```
+app/
+├── api/                    # FastAPI endpoints
+│   ├── alerts.py           # POST /v1/alerts
+│   ├── hitl.py             # POST /api/hitl/{id}/decision
+│   ├── audit.py            # GET /audit/{id}
+│   ├── transactions.py     # Transaction analysis
+│   ├── kyc.py              # KYC / device analysis
+│   ├── sanctions.py        # Sanctions screening
+│   ├── triage.py           # Triage decisions
+│   ├── investigation.py    # Investigation workflow
+│   ├── fraud_memory.py     # Fraud memory store
+│   └── investigate.py      # Full pipeline endpoint (agents + LLM)
+│
+├── core/                   # Config, logging, security
+│   ├── config.py           # Settings (pydantic-settings)
+│   ├── logging.py          # Structured logging (structlog)
+│   └── security.py         # JWT + API key auth
+│
+├── llm/                    # LLM integration
+│   ├── client.py           # Cerebras + Gemini async clients
+│   ├── prompts.py          # Structured JSON prompt templates
+│   └── orchestration.py    # Triage, synthesis, HITL recommendation
+│
+├── agents/                 # Deterministic evidence agents
+│   ├── transaction.py      # Velocity + fraud memory analysis
+│   ├── kyc_device.py       # Device, geo, login anomaly detection
+│   └── sanctions.py        # Country risk + sanctions screening
+│
+├── graph/                  # LangGraph workflow
+│   ├── state.py            # InvestigationState management
+│   ├── workflow.py         # Graph nodes, edges, concurrency
+│   └── scoring.py          # Hybrid rule + AI risk scoring
+│
+├── services/               # Business logic layer
+│   ├── transaction_service.py
+│   ├── kyc_service.py
+│   ├── sanctions_service.py
+│   ├── triage_service.py
+│   ├── investigation_service.py
+│   ├── fraud_memory_service.py
+│   ├── ai_reasoning_service.py
+│   └── action_engine.py
+│
+├── data/                   # Built-in demo dataset (JSON)
+│   ├── transactions.json
+│   ├── customers.json
+│   ├── kyc_events.json
+│   ├── sanctions_data.json
+│   └── fraud_memory.json
+│
+├── shared/                 # Shared models and enums
+│   ├── models.py
+│   └── enums.py
+│
+└── main.py                 # FastAPI app entry point
+
+dashboard/
+└── streamlit_app.py        # 10-stage end-to-end demo UI
+
+tests/                      # Test suite
+docker-compose.yml
+pyproject.toml
+```
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `POST` | `/v1/alerts` | Ingest fraud alert (idempotent) |
+| `POST` | `/v1/investigate/triage` | AI triage via Cerebras |
+| `POST` | `/v1/investigate/full` | Full pipeline: agents + Gemini synthesis |
+| `POST` | `/v1/investigate/hitl-recommendation` | Gemini analyst briefing |
+| `POST` | `/api/hitl/{id}/decision` | Submit analyst decision |
+| `GET` | `/audit/{id}` | Retrieve audit trail |
+| `POST` | `/v1/transactions/analyze` | Transaction agent |
+| `POST` | `/v1/kyc/analyze` | KYC / device agent |
+| `POST` | `/v1/sanctions/analyze` | Sanctions agent |
+| `POST` | `/v1/triage/alert` | Rule-based triage |
+| `GET` | `/v1/fraud-memory/stats` | Fraud memory statistics |
+| `GET` | `/docs` | Swagger UI |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) package manager
+- Cerebras API key — [console.cerebras.ai](https://console.cerebras.ai)
+- Gemini API key — [aistudio.google.com](https://aistudio.google.com)
+
+### Setup
+
+```bash
+# Clone
+git clone https://github.com/habeneyasu/Agentic-AI-Fraud-Investigator.git
+cd Agentic-AI-Fraud-Investigator
+
+# Create virtual environment and install dependencies
+uv venv .venv --python 3.11
+source .venv/bin/activate
+uv pip install -e ".[test]"
+```
+
+### Configure environment
+
+```bash
+# Edit .env and add your API keys
+CEREBRAS_API_KEY=your-cerebras-api-key
+GEMINI_API_KEY=your-gemini-api-key
+CEREBRAS_MODEL=llama3.1-70b
+GEMINI_MODEL=gemini-1.5-flash
+API_KEY=dev-secret-api-key
+```
+
+### Run
+
+```bash
+# Terminal 1 — Backend API
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2 — Streamlit Dashboard
+uv run streamlit run dashboard/streamlit_app.py --server.port 8501
+```
+
+- API docs → http://localhost:8000/docs
+- Dashboard → http://localhost:8501
+
+### Docker
+
+```bash
+docker-compose up -d
+```
+
+---
+
+## Demo Dashboard — 10 Stages
+
+The Streamlit dashboard guides the audience through the full investigation lifecycle as a cinematic narrative:
+
+| Stage | What it shows |
+|---|---|
+| 1 · Data Sources | Upload custom data or use built-in dataset (transactions, KYC, sanctions, fraud memory) |
+| 2 · Generate Alert | Flag a suspicious transaction → calls `POST /v1/alerts` |
+| 3 · Alerts Queue | Live feed with severity pills, status, and investigation trigger |
+| 4 · Triage Gate | Cerebras Llama classifies the alert (AUTO_CLOSE vs ESCALATE) |
+| 5 · Agent Lab | Three parallel agents run via `asyncio.gather` with live `st.status()` spinners |
+| 6 · AI Risk Scoring | Gemini synthesizes all findings → risk score, evidence chain, reasoning steps |
+| 7 · HITL Review | Gemini briefs the analyst → analyst makes the final decision |
+| 8 · Resolution | Action engine executes freeze/reverse/block/SMS + fraud memory update |
+| 9 · Audit Trail | Full timestamped event log + raw trace + agent evidence archive |
+| 10 · Live Dashboard | Real-time metrics, active investigations, risk distribution, fraud trends |
+
+---
+
+## LLM Strategy
+
+| Task | Model | Why |
+|---|---|---|
+| Alert triage | Cerebras `llama3.1-70b` | Low latency, cost-efficient for fast classification |
+| Investigation synthesis | Gemini 1.5 Flash | Strong reasoning for multi-signal evidence analysis |
+| HITL analyst briefing | Gemini 1.5 Flash | Structured natural language recommendation |
+
+Both providers have graceful fallback to rule-based logic if the API is unavailable — the demo never breaks.
+
+---
+
+## Risk Scoring
+
+Final score = `(rule_based_score × 0.5) + (ai_context_score × 0.5)`
+
+| Score | Tier | Routing |
+|---|---|---|
+| ≥ 80 | CRITICAL | HITL required |
+| 60–79 | HIGH | HITL required |
+| 50–69, confidence < 0.80 | MEDIUM (uncertain) | HITL required |
+| < 70, confidence ≥ 0.80 | LOW/MEDIUM | Auto-approve |
+
+Rule weights: velocity spike (0.4) · new device (0.3) · high-risk country (0.3)
+
+---
+
+## Investigation Lifecycle
+
+```
+RECEIVED → TRIAGE → INVESTIGATING → SCORING → DECIDING
+                                                    │
+                              ┌─────────────────────┤
+                              ▼                     ▼
+                        AUTO_APPROVE          AWAITING_HUMAN
+                              │                     │
+                              └──────────┬──────────┘
+                                         ▼
+                               RESOLUTION_IN_PROGRESS
+                                         │
+                    ┌────────────────────┤
+                    ▼                    ▼
+         CLOSED_FRAUD_CONFIRMED   CLOSED_FALSE_POSITIVE
+
+Also: CLOSED_AUTO_CLEARED · CLOSED_LOW_RISK · PARTIAL_EVIDENCE · FAILED
+```
+
+---
+
+## Security
+
+- `X-API-Key` header required on all endpoints
+- `X-User-Role` header enforced on HITL and audit endpoints (`Analyst` / `Auditor`)
+- JWT token support for future auth expansion
+- Input validation via Pydantic v2 on all request bodies
+
+---
+
+## Testing
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=app tests/
+```
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)
+
+---
+
+*Built by Haben Eyasu Akelom for the Andela AI Engineering Bootcamp.*

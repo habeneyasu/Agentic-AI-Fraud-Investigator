@@ -65,6 +65,7 @@ from app.api.sanctions import router as sanctions_router
 from app.api.triage import router as triage_router
 from app.api.investigation import router as investigation_router
 from app.api.fraud_memory import router as fraud_memory_router
+from app.api.investigate import router as investigate_router
 
 app.include_router(alerts_router, prefix="/v1")
 app.include_router(hitl_router)
@@ -75,6 +76,7 @@ app.include_router(sanctions_router, prefix="/v1")
 app.include_router(triage_router, prefix="/v1")
 app.include_router(investigation_router, prefix="/v1")
 app.include_router(fraud_memory_router, prefix="/v1")
+app.include_router(investigate_router, prefix="/v1")
 
 
 if __name__ == "__main__":
