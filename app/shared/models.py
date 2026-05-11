@@ -1,33 +1,46 @@
-"""
-Centralized data models for the fraud investigation system.
-"""
+"""Pydantic domain models and API contracts for fraud investigations."""
 
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional
+
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.shared.enums import *
+from app.shared.enums import (
+    ActionRecommendation,
+    AlertType,
+    AnomalyType,
+    DecisionType,
+    FraudPattern,
+    InvestigationStatus,
+    MemoryStatus,
+    MemoryType,
+    RiskLevel,
+    SanctionType,
+    TriageCategory,
+    TriagePriority,
+)
 
 
-# Base Models
-class BaseResponse(BaseModel):
-    """Base response model."""
+class ApiMessageResponse(BaseModel):
+    """Standard API envelope for success and list responses."""
+
     success: bool = True
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     message: Optional[str] = None
+    data: Optional[Any] = None
 
 
-class ErrorResponse(BaseResponse):
-    """Error response model."""
+class ApiErrorResponse(ApiMessageResponse):
+    """Standard API envelope for errors."""
+
     success: bool = False
     error: str
     details: Optional[Dict[str, Any]] = None
 
 
-# Core Entity Models
-class TransactionModel(BaseModel):
-    """Transaction data model."""
+class TransactionRecord(BaseModel):
+    """Normalized transaction payload for analysis agents."""
     transaction_id: str
     customer_id: str
     amount: float
@@ -61,8 +74,8 @@ class GeoLocation(BaseModel):
     is_vpn: bool = False
 
 
-class EntityModel(BaseModel):
-    """Entity model for sanctions screening."""
+class SanctionsParty(BaseModel):
+    """Counterparty or entity submitted for sanctions / watchlist screening."""
     name: str
     country_code: str
     entity_type: str = "unknown"
@@ -71,8 +84,8 @@ class EntityModel(BaseModel):
 
 
 # Investigation Models
-class InvestigationModel(BaseModel):
-    """Investigation model."""
+class InvestigationCase(BaseModel):
+    """Canonical investigation case opened from an alert or manual review."""
     investigation_id: str
     transaction_id: str
     customer_id: str
@@ -110,8 +123,8 @@ class AgentResult(BaseModel):
 
 
 # Alert Models
-class AlertModel(BaseModel):
-    """Alert model."""
+class FraudAlertRecord(BaseModel):
+    """Persisted fraud alert metadata (queue / case management)."""
     alert_id: str
     investigation_id: str
     alert_type: AlertType
@@ -122,8 +135,8 @@ class AlertModel(BaseModel):
 
 
 # KYC Models
-class KYCEventModel(BaseModel):
-    """KYC event model."""
+class KycEventRecord(BaseModel):
+    """KYC / authentication telemetry tied to a customer session."""
     customer_id: str
     event_type: str = "login"
     device_info: Optional[DeviceInfo] = None
@@ -167,8 +180,9 @@ class SanctionsAnalysisResult(BaseModel):
 
 
 # Triage Models
-class TriageRequest(BaseModel):
-    """Triage request model."""
+class CaseTriageContext(BaseModel):
+    """Structured case context for deterministic triage services."""
+
     investigation_id: str
     customer_id: str
     transaction_id: str
@@ -177,20 +191,6 @@ class TriageRequest(BaseModel):
     alerts: List[Dict[str, Any]] = Field(default_factory=list)
     customer_risk_profile: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-class TriageResult(BaseModel):
-    """Triage result model."""
-    investigation_id: str
-    triage_decision: str
-    priority: Priority
-    priority_score: float = Field(ge=0.0, le=1.0)
-    escalation_required: bool
-    auto_action: ActionRecommendation
-    human_review_required: bool
-    reasoning: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    triage_timestamp: datetime
 
 
 # Fraud Memory Models
@@ -245,8 +245,8 @@ class MemoryStatsResponse(BaseModel):
 
 
 # Evidence Models
-class EvidenceModel(BaseModel):
-    """Evidence model."""
+class EvidenceRecord(BaseModel):
+    """Evidence artifact captured during an investigation."""
     evidence_id: str
     investigation_id: str
     type: str
@@ -258,29 +258,34 @@ class EvidenceModel(BaseModel):
 
 # API Request/Response Models
 class TransactionAnalysisRequest(BaseModel):
-    """Transaction analysis API request."""
-    transaction: TransactionModel
+    """API: run transaction fraud agent on a single transaction."""
+
+    transaction: TransactionRecord
     customer_history: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class KYCAnalysisRequest(BaseModel):
-    """KYC analysis API request."""
-    event: KYCEventModel
+class KycAnalysisApiRequest(BaseModel):
+    """API: analyze a KYC / device event."""
+
+    event: KycEventRecord
 
 
-class SanctionsAnalysisRequest(BaseModel):
-    """Sanctions analysis API request."""
-    entity: EntityModel
+class SanctionsScreeningApiRequest(BaseModel):
+    """API: screen a party for sanctions / country risk."""
+
+    entity: SanctionsParty
 
 
-class InvestigationRequest(BaseModel):
-    """Investigation API request."""
-    investigation: InvestigationModel
+class OpenInvestigationApiRequest(BaseModel):
+    """API: start a full investigation workflow from a populated case."""
+
+    investigation: InvestigationCase
 
 
-class TriageAnalysisRequest(BaseModel):
-    """Triage analysis API request."""
-    triage: TriageRequest
+class CaseTriageRulesApiRequest(BaseModel):
+    """API: deterministic triage over structured case context."""
+
+    triage: CaseTriageContext
 
 
 class SynthesisRequest(BaseModel):
@@ -304,23 +309,26 @@ class PatternSearchResponse(BaseModel):
 
 
 # Human-in-the-Loop Models
-class HITLDecision(BaseModel):
-    """Human-in-the-loop decision."""
+class AnalystCaseDecision(BaseModel):
+    """Analyst disposition for a case under human review (HITL)."""
+
     decision: DecisionType
     analyst_id: str
     notes: str = ""
 
 
-class HITLResponse(BaseModel):
-    """HITL decision response."""
+class AnalystCaseDecisionAck(BaseModel):
+    """Acknowledgement payload after persisting an analyst decision."""
+
     investigation_id: str
     status: str
     decision: DecisionType
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
-class AlertPayload(BaseModel):
-    """Alert payload for ingestion."""
+class FraudAlertIngestRequest(BaseModel):
+    """API: ingest a fraud alert from channels / rules engine."""
+
     transaction_id: str
     amount: float
     currency: str = "USD"
@@ -331,8 +339,9 @@ class AlertPayload(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class AlertResponse(BaseResponse):
-    """Alert ingestion response."""
+class FraudAlertIngestResponse(ApiMessageResponse):
+    """API: response after alert is accepted for investigation."""
+
     investigation_id: str
     status: str
 
@@ -454,8 +463,8 @@ class TriageAnalysis(BaseModel):
     )
 
 
-class TriageResult(BaseModel):
-    """Complete triage result with all analysis and recommendations."""
+class CaseTriageAssessment(BaseModel):
+    """Structured output from LLM-assisted triage for a case."""
     case_id: str = Field(..., description="Unique case identifier")
     triage_timestamp: str = Field(..., description="When triage was performed")
     priority: TriagePriority = Field(..., description="Final priority level")
@@ -535,8 +544,8 @@ class ScoringResult:
 
 
 # State Management Models
-class InvestigationState(BaseModel):
-    """Enterprise investigation state for LangGraph workflow."""
+class InvestigationWorkflowState(BaseModel):
+    """Mutable LangGraph state for a single investigation run."""
     
     # Core identifiers
     case_id: str = Field(..., description="Unique case identifier")
@@ -588,10 +597,30 @@ class InvestigationState(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow, description="State creation time")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update time")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
-    
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
-        use_enum_values = True
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    @classmethod
+    def create_initial(
+        cls,
+        *,
+        case_id: str,
+        case_type: str,
+        title: str,
+        description: str,
+        priority: TriagePriority,
+        correlation_id: str,
+    ) -> "InvestigationWorkflowState":
+        """Factory for a new workflow run prior to graph execution."""
+        return cls(
+            case_id=case_id,
+            case_type=case_type,
+            title=title,
+            description=description,
+            priority=priority,
+            correlation_id=correlation_id,
+            status=InvestigationStatus.PENDING,
+        )
 
 
 # Workflow Models

@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Agentic AI Fraud Investigator",
-    description="AI-powered fraud detection and investigation system for Andela Digital Bank",
+    description="Agentic fraud detection and investigation API with orchestrated evidence agents and HITL workflows.",
     version=settings.app_version,
     lifespan=lifespan,
 )

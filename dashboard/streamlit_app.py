@@ -1,13 +1,12 @@
 """
-Andela Digital Bank - Agentic AI Fraud Investigator
-Fully-wired end-to-end demo dashboard.
+Presenter console for the Agentic AI Fraud Investigator reference stack.
 
-Every stage calls real backend APIs. AI reasoning uses Claude Sonnet/Haiku.
-Data can be uploaded or loaded from built-in JSON store.
+Each segment issues real FastAPI calls. Set ``FRAUD_API_BASE`` and ``API_KEY`` to match your deployment.
 """
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import time
@@ -30,16 +29,36 @@ DATA_DIR = Path(__file__).parent.parent / "app" / "data"
 HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
 
 STAGE_LABELS = [
-    "Data Sources",
-    "Generate Alert",
-    "Alerts Queue",
-    "Triage",
-    "Agent Investigation",
-    "AI Risk Scoring",
-    "HITL Review",
-    "Resolution",
-    "Audit Trail",
-    "Live Dashboard",
+    "Evidence & context",
+    "Alert intake",
+    "Operations queue",
+    "Triage & routing",
+    "Specialist agents",
+    "Risk synthesis",
+    "Analyst review (HITL)",
+    "Remediation",
+    "Audit & lineage",
+    "Executive view",
+]
+
+DEMO_KICKER = "Reference walkthrough"
+DEMO_TITLE = "Ten segments — one coherent fraud story"
+DEMO_BODY = (
+    "Open this map when you need the full arc. For presenting, stay in the main column: "
+    "each segment is one chapter; advance with the primary action at the bottom or jump from the sidebar."
+)
+
+NARRATIVE_BEATS = [
+    ("01", "Ground truth", "Load or upload the datasets your agents will reason over."),
+    ("02", "Signal → case", "Promote a suspicious movement into a formal alert with API idempotency."),
+    ("03", "Queue discipline", "Prioritise work the way an operations floor would."),
+    ("04", "Policy first", "Separate fast rules from slower model-assisted classification."),
+    ("05", "Evidence in parallel", "Let independent specialists build an auditable fact base."),
+    ("06", "Synthesis", "Collapse multi-source noise into one risk narrative."),
+    ("07", "Human control", "Reserve material outcomes for an analyst with a structured decision."),
+    ("08", "Execute", "Close the loop with actions and memory updates."),
+    ("09", "Prove it", "Export the immutable trace regulators expect."),
+    ("10", "Steer the program", "Roll up outcomes for leadership without losing fidelity."),
 ]
 
 HIGH_RISK  = {"IR", "KP", "SY", "CU", "VE", "MM", "BY"}
@@ -68,7 +87,138 @@ code, pre, .monospace { font-family: 'SF Mono', 'Monaco', monospace !important; 
     --text-secondary: #94A3B8;
     --text-muted: #64748B;
     --border: rgba(59, 130, 246, 0.2);
+    --gold: #e8c547;
+    --line: rgba(148, 163, 184, 0.18);
 }
+
+.narrative-banner {
+    background: linear-gradient(135deg, rgba(15, 27, 51, 0.92), rgba(8, 17, 32, 0.98));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.narrative-banner .nb-kicker {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 0.35rem;
+}
+.narrative-banner .nb-title {
+    margin: 0 0 0.4rem 0;
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+}
+.narrative-banner .nb-body {
+    margin: 0;
+    font-size: 0.84rem;
+    color: #94a3b8;
+    line-height: 1.55;
+}
+.narrative-banner .nb-steps {
+    margin: 0.75rem 0 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.45rem 0.75rem;
+}
+.narrative-banner .nb-steps li {
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+    background: rgba(15, 27, 51, 0.6);
+    border: 1px solid var(--line);
+}
+.narrative-banner .nb-steps li b {
+    color: #93c5fd;
+    font-weight: 700;
+}
+
+.story-frame {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem 1.25rem 1.1rem;
+    margin-bottom: 1.15rem;
+    background: linear-gradient(145deg, rgba(15, 27, 51, 0.96), rgba(8, 17, 32, 0.99));
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+}
+.story-frame-meta {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 0.45rem;
+}
+.story-frame-beat-line {
+    font-size: 0.9rem;
+    color: #cbd5e1;
+    line-height: 1.55;
+}
+.story-beat-num {
+    color: #93c5fd;
+    font-weight: 800;
+    margin-right: 0.25rem;
+}
+.story-frame-beat-title {
+    font-weight: 700;
+    color: #f1f5f9;
+}
+.story-frame-beat-dash { color: #475569; }
+.story-frame-beat-desc { color: #94a3b8; }
+.story-rail-outer {
+    height: 4px;
+    background: rgba(148, 163, 184, 0.12);
+    border-radius: 999px;
+    margin-top: 0.9rem;
+    overflow: hidden;
+}
+.story-rail-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #2563eb, #6366f1);
+}
+.session-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem 1.25rem;
+    align-items: center;
+    padding: 0.55rem 0.85rem;
+    margin-bottom: 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: rgba(15, 27, 51, 0.55);
+    font-size: 0.78rem;
+    color: #94a3b8;
+}
+.session-strip b { color: #e2e8f0; font-weight: 700; }
+
+.story-beat {
+    font-size: 0.72rem;
+    color: #64748b;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-top: 0.55rem;
+}
+
+.demo-gate {
+    border-left: 3px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.07);
+    padding: 0.85rem 1rem;
+    border-radius: 0 10px 10px 0;
+    margin: 0.5rem 0 1rem;
+}
+.demo-gate-title { font-weight: 700; color: #fcd34d; font-size: 0.82rem; margin-bottom: 0.25rem; }
+.demo-gate-body { color: #cbd5e1; font-size: 0.82rem; line-height: 1.45; }
 
 html, body, [data-testid="stAppViewContainer"] { 
     background: var(--bg-primary) !important; 
@@ -78,7 +228,39 @@ html, body, [data-testid="stAppViewContainer"] {
     background: var(--bg-secondary) !important; 
     border-bottom: 1px solid var(--border); 
     backdrop-filter: blur(10px);
+    position: relative !important;
 }
+/* App title in the real top bar (next to menu) — ::after survives Streamlit’s main-column HTML sanitization */
+[data-testid="stHeader"]::after {
+    content: 'Agentic AI Fraud Investigator';
+    position: absolute;
+    left: clamp(2.6rem, 4vw, 3.75rem);
+    right: clamp(7.5rem, 18vw, 12rem);
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: "Space Grotesk", "Inter", sans-serif;
+    font-size: clamp(0.72rem, 1.05vw, 0.98rem);
+    font-weight: 800;
+    color: #f8fafc !important;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    pointer-events: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-height: 2.6em;
+    overflow: hidden;
+    z-index: 1000000;
+    text-align: left;
+}
+@media (max-width: 520px) {
+    [data-testid="stHeader"]::after {
+        font-size: 0.68rem;
+        right: 6.5rem;
+        max-height: 3em;
+    }
+}
+
 .block-container { 
     max-width: 1400px; 
     padding: 1rem 1.5rem 2rem !important; 
@@ -292,7 +474,6 @@ html, body, [data-testid="stAppViewContainer"] {
 .progress-fill.success { background: var(--success); }
 .progress-fill.fraud { background: var(--fraud); }
 .progress-fill.warning { background: var(--warning); }
-}
 
 /* Pulse Animations */
 @keyframes pulse-active {
@@ -381,7 +562,7 @@ html, body, [data-testid="stAppViewContainer"] {
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
-/* Andela Branding */
+/* App branding */
 .branding-header {
     background: rgba(10, 37, 64, 0.9);
     border: 1px solid rgba(255, 209, 102, 0.1);
@@ -421,6 +602,7 @@ html, body, [data-testid="stAppViewContainer"] {
 #MainMenu, footer, [data-testid="stToolbar"] { display: none !important; }
 
 .stepper-wrap { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:1.5rem; padding-bottom:1rem; border-bottom:1px solid #1a2d45; }
+[data-testid="stSidebar"] .stepper-wrap { margin-bottom:0.65rem; padding-bottom:0.65rem; font-size:0.68rem; }
 .step-chip { padding:.25rem .7rem; border-radius:6px; font-size:.68rem; font-weight:600; letter-spacing:.03em; border:1px solid #1a2d45; color:#475569; background:#0a1628; }
 .step-chip.active { background:linear-gradient(135deg,#1e3a5f,#0f2a4a); color:#93c5fd; border-color:#3b82f6; box-shadow:0 0 0 1px rgba(59,130,246,.3),0 4px 12px rgba(59,130,246,.15); }
 .step-chip.done { background:#0a2218; color:#34d399; border-color:#065f46; }
@@ -737,6 +919,193 @@ def api_badge(label: str, ok: bool = True) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE HERO — reusable Hero-Content-Detail header for every stage
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_hero(
+    stage_num: int,
+    title: str,
+    description: str,
+    badge_label: str = "",
+    badge_ok: bool = True,
+    learning: str = "",
+) -> None:
+    """Stage header: where we are in the story, what to observe, optional status chip."""
+    _ = stage_num  # kept for call-site readability (aligns with session stage index)
+    badge_html = ""
+    color = "#34d399" if badge_ok else "#fbbf24"
+    border = "rgba(52,211,153,.35)" if badge_ok else "rgba(251,191,36,.35)"
+    bg = "rgba(16,185,129,.08)" if badge_ok else "rgba(245,158,11,.1)"
+    if badge_label:
+        badge_html = (
+            f'<span style="font-size:.65rem;font-weight:700;letter-spacing:.08em;'
+            f'text-transform:uppercase;background:{bg};border:1px solid {border};border-radius:8px;'
+            f'padding:.28rem .6rem;color:{color};white-space:nowrap;">'
+            f"{html.escape(badge_label)}</span>"
+        )
+
+    learning_html = ""
+    if learning:
+        learning_html = (
+            f'<div class="story-beat">Presenter note — {html.escape(learning)}</div>'
+        )
+
+    title_h = html.escape(title)
+    desc_h = html.escape(description)
+
+    st.markdown(
+        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;'
+        f'border-bottom:1px solid var(--line);padding-bottom:.85rem;margin-bottom:1rem;">'
+        f'<div style="min-width:0;">'
+        f'<div style="font-size:1.05rem;font-weight:700;color:#f1f5f9;letter-spacing:-.02em;line-height:1.25;">{title_h}</div>'
+        f'<div style="font-size:.84rem;color:#94a3b8;margin-top:.35rem;line-height:1.5;">{desc_h}</div>'
+        f'{learning_html}'
+        f'</div>'
+        f'<div style="flex-shrink:0;padding-top:.15rem;">{badge_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_narrative_banner() -> None:
+    """Full 10-beat outline (use inside an expander so the main column stays chapter-focused)."""
+    items = "".join(
+        "<li><b>{}</b> <strong>{}</strong> — {}</li>".format(
+            html.escape(num), html.escape(title), html.escape(desc)
+        )
+        for num, title, desc in NARRATIVE_BEATS
+    )
+    st.markdown(
+        f'<div class="narrative-banner">'
+        f'<div class="nb-kicker">{html.escape(DEMO_KICKER)}</div>'
+        f'<div class="nb-title">{html.escape(DEMO_TITLE)}</div>'
+        f'<p class="nb-body">{html.escape(DEMO_BODY)}</p>'
+        f'<ul class="nb-steps">{items}</ul>'
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_story_frame(stage: int) -> None:
+    """Single-chapter header: where you are in the story and what this step proves."""
+    s = max(1, min(10, stage))
+    idx = s - 1
+    num, beat_title, beat_desc = NARRATIVE_BEATS[idx]
+    label = STAGE_LABELS[idx]
+    pct = int(round(100 * s / 10))
+    st.markdown(
+        f'<div class="story-frame">'
+        f'<div class="story-frame-meta">Segment <b>{s}</b> of 10 · {html.escape(label)}</div>'
+        f'<div class="story-frame-beat-line"><span class="story-beat-num">{html.escape(num)}</span>'
+        f'<span class="story-frame-beat-title">{html.escape(beat_title)}</span>'
+        f'<span class="story-frame-beat-dash"> — </span>'
+        f'<span class="story-frame-beat-desc">{html.escape(beat_desc)}</span></div>'
+        f'<div class="story-rail-outer"><div class="story-rail-fill" style="width:{pct}%;"></div></div>'
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_session_strip(m: dict[str, int], fraud_stopped: int) -> None:
+    """Lightweight counters while working through the story (not a full dashboard)."""
+    st.markdown(
+        '<div class="session-strip">'
+        f'<span><b>{m["total_alerts"]}</b> alerts</span>'
+        f'<span><b>{fraud_stopped}</b> confirmed + blocked</span>'
+        f'<span><b>{m["auto_closed"]}</b> auto-closed</span>'
+        f'<span><b>{m["hitl_pending"]}</b> HITL queue</span>'
+        f'<span><b>{m["blocked"]}</b> accounts blocked</span>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_kpi_dashboard(m: dict[str, int], fraud_stopped: int) -> None:
+    """Executive-style KPI row for the closing segment."""
+    st.markdown(
+        '''
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
+        <div class="kpi-card agent-card-animated">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Total Alerts</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--text-primary);">'''
+        + str(m["total_alerts"])
+        + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Synthetic counter (demo)</div>
+        </div>
+        <div class="kpi-card fraud agent-card-animated" style="animation-delay: 0.1s;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Mitigated exposure</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--fraud);">'''
+        + str(fraud_stopped)
+        + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Confirmed + blocked</div>
+        </div>
+        <div class="kpi-card success agent-card-animated" style="animation-delay: 0.2s;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Auto-Closed</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--success);">'''
+        + str(m["auto_closed"])
+        + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Rules / low-touch path</div>
+        </div>
+        <div class="kpi-card warning agent-card-animated" style="animation-delay: 0.3s;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">HITL Pending</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--warning);">'''
+        + str(m["hitl_pending"])
+        + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Analyst backlog</div>
+        </div>
+        <div class="kpi-card agent-card-animated" style="animation-delay: 0.4s;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Accounts Blocked</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--fraud);">'''
+        + str(m["blocked"])
+        + '''</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Post-decision holds</div>
+        </div>
+    </div>
+    ''',
+        unsafe_allow_html=True,
+    )
+
+
+def render_post_segment_chrome(stage: int, m: dict[str, int], fraud_stopped: int) -> None:
+    """Outline, counters, and activity — kept below the live demo so the segment leads."""
+    with st.expander("Outline, counters & activity (optional)", expanded=False):
+        render_story_frame(stage)
+        st.markdown(
+            '<p style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;'
+            "color:#64748b;margin:0.85rem 0 0.4rem;\">Full walkthrough map (10 segments)</p>",
+            unsafe_allow_html=True,
+        )
+        render_narrative_banner()
+        if stage <= 2:
+            st.caption("Session counters appear once alerts exist (segment 3 onward).")
+        elif stage < 10:
+            render_session_strip(m, fraud_stopped)
+        else:
+            st.caption("Primary roll-ups are in the segment body above; reset from the sidebar to rehearse.")
+        if stage >= 4:
+            st.markdown('<span class="section-label">Recent activity</span>', unsafe_allow_html=True)
+            recent_activity = st.session_state.audit_trail[-10:]
+            activity_html = ""
+            for event in reversed(recent_activity):
+                activity_html += (
+                    '<div class="activity-item">'
+                    f'<div style="color: var(--text-primary); margin-bottom: 0.25rem;">'
+                    f"{html.escape(str(event['event']))}</div>"
+                    f'<div class="timestamp">{html.escape(str(event["timestamp"]))}</div></div>'
+                )
+            st.markdown(f'<div class="activity-feed">{activity_html}</div>', unsafe_allow_html=True)
+
+
+def action_button(label: str, key: str, next_stage: int) -> None:
+    """Right-aligned proceed button at the bottom of a stage."""
+    _, col = st.columns([3, 1])
+    with col:
+        if st.button(label, type="primary", key=key, use_container_width=True):
+            st.session_state.stage = next_stage
+            st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # DATA HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 def load_json(filename: str) -> Any:
@@ -783,7 +1152,7 @@ def init_state() -> None:
         "alerts": [],
         "selected_alert_id": None,
         "fraud_memory_updates": [],
-        "audit_trail": [{"timestamp": utcnow_iso(), "event": "SYSTEM BOOT — LangGraph watchdog armed"}],
+        "audit_trail": [{"timestamp": utcnow_iso(), "event": "SESSION_START — demo console initialised"}],
         "metrics": {"total_alerts": 0, "blocked": 0, "auto_closed": 0, "hitl_pending": 0, "confirmed_fraud": 0},
         # Data — loaded from files or uploaded
         "transactions": load_json("transactions.json"),
@@ -800,93 +1169,23 @@ def init_state() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # LAYOUT
 # ─────────────────────────────────────────────────────────────────────────────
-def render_stepper(current: int) -> None:
-    """Render interactive stepper with progress line and icons"""
-    st.markdown('<div class="step-progress">', unsafe_allow_html=True)
-    
-    icons = ["📊", "🚨", "📋", "🔍", "🔬", "🧠", "👥", "⚡", "📋", "📈"]
-    
-    for i, label in enumerate(STAGE_LABELS, 1):
-        is_done = i < current
-        is_active = i == current
-        is_future = i > current
-        
-        if is_done:
-            chip_class = "done"
-            icon = "✅"
-        elif is_active:
-            chip_class = "active"
-            icon = icons[i-1]
-        else:
-            chip_class = ""
-            icon = icons[i-1]
-        
-        st.markdown(f'''
-        <div class="step-chip {chip_class}" style="animation: {'pulse-active 2s ease-in-out infinite' if is_active else 'none'};">
-            {icon} {label}
-        </div>
-        ''', unsafe_allow_html=True)
-
-def render_stepper_legacy(current: int) -> None:
-    chips = "".join(
-        f'<span class="step-chip {"active" if i==current else "done" if i<current else ""}">{label}</span>'
+def _stepper_chips_html(current: int) -> str:
+    return "".join(
+        f'<span class="step-chip {"active" if i==current else "done" if i<current else ""}">'
+        f"{html.escape(label)}</span>"
         for i, label in enumerate(STAGE_LABELS, 1)
     )
-    st.markdown(f'<div class="stepper-wrap">{chips}</div>', unsafe_allow_html=True)
 
 
 def render_sidebar() -> None:
-    m = st.session_state.metrics
     current_stage = st.session_state.stage
-
-    # Header
-    st.sidebar.markdown(
-        '<div style="padding:0.75rem 0 0.5rem;">'
-        '<div style="font-size:1rem;font-weight:800;color:#f1f5f9;letter-spacing:-.02em;">🏛️ Command Center</div>'
-        '<div style="font-size:0.7rem;color:#475569;margin-top:2px;">Andela Digital Bank · Fraud AI</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Live clock
-    from datetime import datetime, timezone
-    clock = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-    st.sidebar.markdown(
-        f'<div style="background:#0f1f35;border:1px solid #1a2d45;border-radius:8px;'
-        f'padding:0.4rem 0.75rem;margin-bottom:0.75rem;'
-        f'display:flex;justify-content:space-between;align-items:center;">'
-        f'<span style="font-size:0.68rem;color:#475569;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Live</span>'
-        f'<span style="font-family:monospace;font-size:0.75rem;color:#3b82f6;font-weight:700;">{clock}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Compact metrics
-    stats = [
-        ("Total Alerts",     m["total_alerts"],    "#f1f5f9"),
-        ("Fraud Confirmed",  m["confirmed_fraud"],  "#ef4444"),
-        ("Auto-Closed",      m["auto_closed"],      "#10b981"),
-        ("HITL Pending",     m["hitl_pending"],     "#f59e0b"),
-        ("Accts Blocked",    m["blocked"],          "#ef4444"),
-    ]
-    rows = "".join(
-        f'<div style="display:flex;justify-content:space-between;align-items:center;'
-        f'padding:0.35rem 0;border-bottom:1px solid #1a2d45;">'
-        f'<span style="font-size:0.73rem;color:#475569;">{l}</span>'
-        f'<span style="font-size:0.82rem;font-weight:700;color:{c};">{v}</span></div>'
-        for l, v, c in stats
-    )
-    st.sidebar.markdown(
-        f'<div style="background:#0f1f35;border:1px solid #1a2d45;border-radius:10px;'
-        f'padding:0.6rem 0.9rem;margin-bottom:0.75rem;">{rows}</div>',
-        unsafe_allow_html=True,
-    )
+    m = st.session_state.metrics
 
     # Navigation — phase groups
     phases = [
-        ("INGESTION",  STAGE_LABELS[0:3],  range(1, 4)),
-        ("ANALYSIS",   STAGE_LABELS[3:6],  range(4, 7)),
-        ("DECISION",   STAGE_LABELS[6:10], range(7, 11)),
+        ("Ingestion", STAGE_LABELS[0:3], range(1, 4)),
+        ("Analysis", STAGE_LABELS[3:6], range(4, 7)),
+        ("Decision & closure", STAGE_LABELS[6:10], range(7, 11)),
     ]
 
     for phase_name, labels, indices in phases:
@@ -929,23 +1228,32 @@ def render_sidebar() -> None:
 # STAGE 1 — DATA SOURCES (with upload support)
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_data_sources() -> None:
-    st.markdown('<span class="section-label">STAGE 1 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Data Sources &amp; Fraud Context</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Upload your own data or use the built-in Andela Digital Bank dataset. All data feeds directly into the investigation pipeline.</div>', unsafe_allow_html=True)
+    src_label = "Built-in" if st.session_state.get("data_source", "built-in") == "built-in" else "Uploaded"
+    stage_hero(
+        1,
+        "Establish the evidence base",
+        "Load the reference pack (transactions, KYC, sanctions, fraud memory) or swap in your own JSON—everything downstream reads from here.",
+        badge_label="",
+        badge_ok=True,
+        learning="",
+    )
 
-    # Data source selector
-    col_src, col_status = st.columns([3, 1])
-    with col_src:
-        source = st.radio("Data source", ["Built-in dataset", "Upload custom data"], horizontal=True, key="data_source_radio")
-    with col_status:
-        src_label = "built-in" if source == "Built-in dataset" else "uploaded"
-        st.markdown(f'<div style="margin-top:1.5rem;">{api_badge(f"Source: {src_label}")}</div>', unsafe_allow_html=True)
+    r1, r2 = st.columns([5, 2])
+    with r1:
+        source = st.radio(
+            "Dataset",
+            ["Built-in dataset", "Upload custom data"],
+            horizontal=True,
+            key="data_source_radio",
+            label_visibility="visible",
+        )
+    with r2:
+        st.caption(f"Active · **{src_label}**")
 
     if source == "Upload custom data":
         st.markdown("<hr>", unsafe_allow_html=True)
         st.markdown('<span class="section-label">Upload JSON Data Files</span>', unsafe_allow_html=True)
-        st.caption("Each file must be a JSON array of objects matching the built-in schema.")
-
+        st.caption("Each file must be a JSON array matching the built-in schema.")
         col1, col2, col3 = st.columns(3)
         with col1:
             txn_file = st.file_uploader("Transactions (JSON)", type="json", key="upload_txn")
@@ -953,20 +1261,16 @@ def stage_data_sources() -> None:
                 st.session_state.transactions = json.load(txn_file)
                 st.session_state.data_source = "uploaded"
                 st.success(f"✓ {len(st.session_state.transactions)} transactions loaded")
-
         with col2:
             kyc_file = st.file_uploader("KYC Events (JSON)", type="json", key="upload_kyc")
             if kyc_file:
                 st.session_state.kyc_events = json.load(kyc_file)
                 st.success(f"✓ {len(st.session_state.kyc_events)} KYC events loaded")
-
         with col3:
             cust_file = st.file_uploader("Customers (JSON)", type="json", key="upload_cust")
             if cust_file:
                 st.session_state.customers = json.load(cust_file)
                 st.success(f"✓ {len(st.session_state.customers)} customers loaded")
-
-        st.markdown('<span class="section-label" style="margin-top:.5rem;">Schema Reference</span>', unsafe_allow_html=True)
         with st.expander("View expected JSON schemas"):
             st.code(json.dumps({
                 "transactions": [{"transaction_id":"TXN001","customer_id":"CUST001","amount":15000,"currency":"USD","timestamp":"2025-01-10T02:30:00Z","destination_country":"IR","device_id":"DEV001","ip_address":"185.1.2.3","risk_indicators":["high_value_rush"]}],
@@ -987,7 +1291,7 @@ def stage_data_sources() -> None:
     san_entries = san.get("sanctions_entries", []) if isinstance(san, dict) else []
 
     st.markdown(
-        f'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem;margin-bottom:1.5rem;">'
+        f'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;margin-bottom:1rem;">'
         f'<div class="stat-card"><div class="stat-value" style="color:#3b82f6;">{len(txns)}</div><div class="stat-label">Transactions</div></div>'
         f'<div class="stat-card"><div class="stat-value" style="color:#ef4444;">{flagged}</div><div class="stat-label">Flagged</div></div>'
         f'<div class="stat-card"><div class="stat-value" style="color:#f59e0b;">{kyc_anom}</div><div class="stat-label">KYC Anomalies</div></div>'
@@ -996,17 +1300,23 @@ def stage_data_sources() -> None:
         f'</div>', unsafe_allow_html=True,
     )
 
-    tab_tx, tab_kyc, tab_san, tab_mem, tab_cust = st.tabs(["💳 Transactions", "🔍 KYC Events", "🚫 Sanctions", "🧠 Fraud Memory", "👤 Customers"])
+    tab_tx, tab_kyc, tab_san, tab_mem, tab_cust = st.tabs(
+        ["Transactions", "KYC events", "Sanctions", "Fraud memory", "Customers"]
+    )
 
     with tab_tx:
         # Search and filter bar
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
-            search_term = st.text_input("🔍 Search transactions...", placeholder="Transaction ID, Customer ID, Country...")
+            search_term = st.text_input(
+                "Search",
+                placeholder="Txn ID, customer, country…",
+                label_visibility="visible",
+            )
         with col2:
-            min_amount = st.number_input("Min Amount", value=0.0, key="min_amount")
+            min_amount = st.number_input("Min $", value=0.0, key="min_amount")
         with col3:
-            max_amount = st.number_input("Max Amount", value=100000.0, key="max_amount")
+            max_amount = st.number_input("Max $", value=100000.0, key="max_amount")
         
         # Filter transactions
         filtered_txns = []
@@ -1021,38 +1331,36 @@ def stage_data_sources() -> None:
                 continue
             filtered_txns.append(t)
         
-        # Display as interactive cards
-        st.markdown(f'<div style="margin-bottom: 1rem;">Found {len(filtered_txns)} transactions</div>', unsafe_allow_html=True)
-        
-        for t in filtered_txns[:10]:  # Show first 10
-            amount = t.get("amount", 0)
-            country = t.get("destination_country", "UNKNOWN")
-            risk_level = "CRITICAL" if country in HIGH_RISK else "HIGH" if country in MED_RISK else "MEDIUM"
-            priority_class = "priority-critical" if country in HIGH_RISK else "priority-high" if country in MED_RISK else "priority-low"
-            
-            st.markdown(f'''
-            <div class="glass-panel agent-card-animated" style="margin-bottom: 1rem; padding: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <div>
-                        <div style="font-size: 1.2rem; font-weight: 700; color: var(--gold);">{t.get("transaction_id", "UNKNOWN")}</div>
-                        <div style="color: #94a3b8; font-size: 0.9rem;">{t.get("customer_id", "UNKNOWN")} • {country}</div>
-                    </div>
-                    <div class="{priority_class}">{risk_level}</div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                    <div>
-                        <div style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.5rem;">Amount</div>
-                        <div style="font-size: 1.5rem; font-weight: 800; color: var(--gold);">${amount:,.2f}</div>
-                    </div>
-                    <div>
-                        <div style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.5rem; font-weight: 600;">Risk Factors</div>
-                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                            {"".join(f'<span style="background: rgba(239, 68, 68, 0.15); color: var(--fraud); padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 500; border: 1px solid rgba(239, 68, 68, 0.3);">{ind}</span>' for ind in t.get("risk_indicators", []))}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            ''', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="margin-bottom: 0.75rem; color: #94a3b8; font-size: 0.88rem;">'
+            f"Showing <b>{min(10, len(filtered_txns))}</b> of <b>{len(filtered_txns)}</b> transactions</div>",
+            unsafe_allow_html=True,
+        )
+
+        for t in filtered_txns[:10]:
+            amount = float(t.get("amount", 0) or 0)
+            country = str(t.get("destination_country", "UNKNOWN"))
+            tid = str(t.get("transaction_id", "UNKNOWN"))
+            cid = str(t.get("customer_id", "UNKNOWN"))
+            risk_level = (
+                "CRITICAL" if country in HIGH_RISK else "HIGH" if country in MED_RISK else "MEDIUM"
+            )
+            inds = [str(x) for x in (t.get("risk_indicators") or [])]
+            inds_txt = ", ".join(inds) if inds else "—"
+
+            with st.container():
+                h1, h2 = st.columns([4, 1])
+                with h1:
+                    st.markdown(f"**{tid}** · `{cid}` · **{country}**")
+                with h2:
+                    st.caption(risk_level)
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.metric("Amount (USD)", f"${amount:,.2f}")
+                with c2:
+                    st.caption("Risk indicators")
+                    st.text(inds_txt)
+                st.divider()
         
         if len(filtered_txns) > 10:
             st.info(f"Showing first 10 of {len(filtered_txns)} transactions. Use search to find more.")
@@ -1127,18 +1435,22 @@ def stage_data_sources() -> None:
         st.dataframe(df_cu[["customer_id","name","account_type","risk_profile","total_transactions","total_amount","last_login"]], hide_index=True, use_container_width=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    if st.button("→ Proceed to Generate Alert", type="primary", key="s1_next"):
-        st.session_state.stage = 2
-        st.rerun()
+    action_button("Continue to alert intake →", "s1_next", 2)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STAGE 2 — GENERATE ALERT (calls POST /v1/alerts)
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_generate_alert() -> None:
-    st.markdown('<span class="section-label">STAGE 2 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Generate Alert</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Select a suspicious transaction to trigger a real fraud alert via <code>POST /v1/alerts</code>.</div>', unsafe_allow_html=True)
+    stage_hero(
+        2,
+        "Promote a signal into an operational alert",
+        "`POST /v1/alerts` exercises the same intake contract your channels team would call—payload validation, idempotency hooks, "
+        "and correlation identifiers for downstream LangGraph work.",
+        badge_label="API · POST /v1/alerts",
+        badge_ok=True,
+        learning="Contrast a rules-only world (no ticket) with a governed alert (immutable lineage starts here).",
+    )
 
     txns = [t for t in st.session_state.transactions if t.get("risk_indicators")]
 
@@ -1158,11 +1470,10 @@ def stage_generate_alert() -> None:
                 unsafe_allow_html=True,
             )
         with c2:
-            if st.button("🚨 Flag Alert", key=f"flag_{t['transaction_id']}", use_container_width=True):
-                with st.spinner("🔍 Scanning transaction for fraud patterns..."):
+            if st.button("Flag as alert", key=f"flag_{t['transaction_id']}", use_container_width=True):
+                with st.spinner("Validating payload and calling intake API…"):
                     _create_alert_from_transaction(t)
-                st.success(f"✅ Alert generated for {t['transaction_id']}!")
-                st.balloons()
+                st.success(f"Alert created for {t['transaction_id']} — opening the operations queue.")
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<span class="section-label">Simulate Custom Alert</span>', unsafe_allow_html=True)
@@ -1228,13 +1539,21 @@ def _create_alert_from_transaction(t: dict) -> None:
 # STAGE 3 — ALERTS QUEUE
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_alerts_queue() -> None:
-    st.markdown('<span class="section-label">STAGE 3 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Alerts Queue</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Live alert feed. Click an alert to begin the investigation workflow.</div>', unsafe_allow_html=True)
+    stage_hero(
+        3,
+        "Operations queue with analyst-ready context",
+        "Severity, monetary exposure, corridor risk, and freshness are visible at a glance—mirroring how a floor lead triages work before specialists burn cycles.",
+        badge_label="Work in progress",
+        badge_ok=True,
+        learning="Invite the room to discuss SLA ordering (amount vs. geo risk vs. customer tier).",
+    )
 
     alerts = st.session_state.alerts
     if not alerts:
-        st.markdown('<div class="info-panel">No alerts yet. Go to Stage 2 to generate one.</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="info-panel">No alerts in this session yet. Use <b>Segment 02</b> to raise the first case.</div>',
+            unsafe_allow_html=True,
+        )
         return
 
     total = len(alerts)
@@ -1317,7 +1636,7 @@ def stage_alerts_queue() -> None:
         </div>
         ''', unsafe_allow_html=True)
         
-        if st.button("Investigate →", key=f"inv_{a['alert_id']}", use_container_width=True):
+        if st.button("Open investigation workspace →", key=f"inv_{a['alert_id']}", use_container_width=True):
             st.session_state.selected_alert_id = a["alert_id"]
             st.session_state.stage = 4
             trace(f"INVESTIGATION_STARTED · {a['alert_id']}")
@@ -1333,9 +1652,15 @@ def stage_alerts_queue() -> None:
 # STAGE 4 — TRIAGE (calls POST /v1/investigate/triage → Claude Haiku)
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_triage(alert: dict) -> None:
-    st.markdown('<span class="section-label">STAGE 4 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Triage Gate</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">AI-powered triage via Claude Haiku. Deterministic rules run first, then LLM classification.</div>', unsafe_allow_html=True)
+    stage_hero(
+        4,
+        "Policy-first triage, then model assist",
+        "Fast-path rules keep spend predictable; when the case warrants it, `POST /v1/investigate/triage` calls the orchestrated LLM path (Cerebras in this deployment). "
+        "If the API is unavailable, the UI falls back to transparent rule scoring so the story still completes.",
+        badge_label="API · /v1/investigate/triage",
+        badge_ok=True,
+        learning="Stress why deterministic gates belong in production—even when agents are impressive.",
+    )
 
     st.markdown(
         f'<div class="info-panel">🔍 Alert <b>{alert["alert_id"]}</b> · Customer <b>{alert["customer_id"]}</b>'
@@ -1390,8 +1715,8 @@ def stage_triage(alert: dict) -> None:
                 st.rerun()
         return
 
-    if st.button("▶ Run AI Triage (Claude Haiku)", type="primary", key="run_triage"):
-        with st.spinner("Calling Claude Haiku for triage classification..."):
+    if st.button("Run triage (API + rule fallback)", type="primary", key="run_triage"):
+        with st.spinner("Calling triage endpoint; applying rule-based fallback if needed…"):
             payload = {
                 "alert_id": alert["alert_id"],
                 "customer_id": alert["customer_id"],
@@ -1437,13 +1762,8 @@ def _show_triage_result(tr: dict) -> None:
     gc    = risk_gradient(score)
     rc    = risk_color(score)
     st.sidebar.markdown(
-        f'<div class="branding-header">'
-        '<div class="branding-logo">🏛️</div>'
-        '<div>'
-            '<div class="branding-logo">Andela Digital Bank</div>'
-            '<div class="branding-tagline">Agentic AI Fraud Investigator</div>'
-        '</div>'
-        '</div>', unsafe_allow_html=True,
+        '<div style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin:.35rem 0 .4rem;">Live triage readout</div>',
+        unsafe_allow_html=True,
     )
     st.sidebar.markdown(
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">'
@@ -1466,9 +1786,14 @@ def _show_triage_result(tr: dict) -> None:
 # STAGE 5 — PARALLEL AGENT INVESTIGATION (calls POST /v1/investigate/full)
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_agents(alert: dict) -> None:
-    st.markdown('<span class="section-label">STAGE 5 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Parallel Agent Investigation</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Transaction, KYC, and Sanctions agents run in parallel via asyncio.gather. Results feed directly into Claude Sonnet for AI synthesis.</div>', unsafe_allow_html=True)
+    stage_hero(
+        5,
+        "Specialist agents gather evidence in parallel",
+        "Transaction velocity, device/geo behaviour, and sanctions posture are collected concurrently—each stream stays explainable so risk committees can replay the logic.",
+        badge_label="Concurrency · asyncio.gather",
+        badge_ok=True,
+        learning="Highlight partial failures: one agent degrading should not collapse the entire narrative.",
+    )
 
     st.markdown(
         f'<div class="info-panel">🔍 Case <b>{alert["investigation_id"]}</b> · {alert["customer_id"]}'
@@ -1671,28 +1996,48 @@ def _show_agent_cards(results: dict) -> None:
 # STAGE 6 — AI REASONING & RISK SCORING (real Claude Sonnet output)
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_risk_scoring(alert: dict) -> None:
-    st.markdown('<span class="section-label">STAGE 6 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">AI Reasoning &amp; Risk Scoring</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Cerebras (fast scoring) + Gemini (deep reasoning) synthesize all agent findings into an explainable risk score with evidence-linked reasoning.</div>', unsafe_allow_html=True)
+    def _unit_interval(x: Any, default: float) -> float:
+        """API fields may be missing or explicitly null; values may be 0–1 or 0–100."""
+        v = x if x is not None else default
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            f = float(default)
+        if f > 1.0:
+            f = f / 100.0
+        return max(0.0, min(1.0, f))
+
+    stage_hero(
+        6,
+        "Hybrid scoring with an auditable narrative",
+        "`POST /v1/investigate/full` fuses deterministic signals with Gemini synthesis so you can show both the arithmetic and the prose a committee expects.",
+        badge_label="Gemini synthesis",
+        badge_ok=True,
+        learning="Emphasise the split: rule score + model context → blended decision with explicit confidence.",
+    )
 
     rr = alert.get("risk_result") or {}
-    ai = alert.get("ai_synthesis") or {}
 
-    # Use AI synthesis if available, else fall back to risk_result
-    final_score = rr.get("final_risk_score", rr.get("risk_score", 0.5))
-    if isinstance(final_score, float) and final_score > 1:
-        final_score = final_score / 100
-    risk_tier   = rr.get("risk_tier", rr.get("risk_level", "MEDIUM"))
-    confidence  = rr.get("confidence", 0.7)
-    rule_score  = rr.get("rule_based_score", rr.get("rule_score", final_score))
-    ai_score    = rr.get("ai_context_score", rr.get("ai_score", final_score))
+    # Use AI synthesis if available, else fall back to risk_result (or handles null keys)
+    raw_final = rr.get("final_risk_score") or rr.get("risk_score") or 0.5
+    final_score = _unit_interval(raw_final, 0.5)
+    risk_tier = rr.get("risk_tier") or rr.get("risk_level") or "MEDIUM"
+    confidence = _unit_interval(rr.get("confidence"), 0.7)
+    rule_score = _unit_interval(
+        rr.get("rule_based_score") or rr.get("rule_score") or raw_final,
+        final_score,
+    )
+    ai_score = _unit_interval(
+        rr.get("ai_context_score") or rr.get("ai_score") or raw_final,
+        final_score,
+    )
     # Generate AI summary using AI reasoning service if not available
     summary = rr.get("executive_summary", rr.get("explanation"))
     if not summary:
         # Use AI reasoning service to generate summary
         try:
-            from app.services.ai_reasoning_service import AIReasoningService
-            ai_service = AIReasoningService()
+            from app.services.ai_reasoning_service import InvestigationReasoningService
+            ai_service = InvestigationReasoningService()
             ai_result = ai_service.generate_executive_summary(alert)
             summary = ai_result.get("summary", "AI analysis in progress...")
         except Exception as e:
@@ -1720,12 +2065,12 @@ def stage_risk_scoring(alert: dict) -> None:
 
     with col_scores:
         st.markdown('<span class="section-label">Score Breakdown</span>', unsafe_allow_html=True)
-        rule_pct = int(float(rule_score) * 100) if float(rule_score) <= 1 else int(rule_score)
-        ai_pct   = int(float(ai_score) * 100) if float(ai_score) <= 1 else int(ai_score)
+        rule_pct = int(rule_score * 100)
+        ai_pct = int(ai_score * 100)
         st.markdown(
             f'<div class="summary-card">'
-            f'<div class="summary-row"><span class="sk">Rule-Based Score</span><span class="sv" style="color:{risk_color(float(rule_score) if float(rule_score)<=1 else float(rule_score)/100)};">{rule_pct}/100</span></div>'
-            f'<div class="summary-row"><span class="sk">AI Context Score (Claude)</span><span class="sv" style="color:{risk_color(float(ai_score) if float(ai_score)<=1 else float(ai_score)/100)};">{ai_pct}/100</span></div>'
+            f'<div class="summary-row"><span class="sk">Rule-Based Score</span><span class="sv" style="color:{risk_color(rule_score)};">{rule_pct}/100</span></div>'
+            f'<div class="summary-row"><span class="sk">AI context score</span><span class="sv" style="color:{risk_color(ai_score)};">{ai_pct}/100</span></div>'
             f'<div class="summary-row"><span class="sk">Final Blended Score</span><span class="sv" style="color:{rc};">{pct}/100</span></div>'
             f'<div class="summary-row"><span class="sk">Confidence</span><span class="sv" style="color:#10b981;">{conf_p}%</span></div>'
             f'<div class="summary-row"><span class="sk">Risk Tier</span><span class="sv" style="color:{rc};">{risk_tier}</span></div>'
@@ -1733,10 +2078,9 @@ def stage_risk_scoring(alert: dict) -> None:
             f'</div>', unsafe_allow_html=True,
         )
 
-    # Evidence chain from Claude
     if evidence:
         st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown('<span class="section-label">Evidence-to-Reasoning Links (Claude Sonnet)</span>', unsafe_allow_html=True)
+        st.markdown('<span class="section-label">Evidence-to-reasoning map</span>', unsafe_allow_html=True)
         for e in evidence:
             st.markdown(
                 f'<div class="evidence-card">'
@@ -1759,7 +2103,7 @@ def stage_risk_scoring(alert: dict) -> None:
 
     # AI Executive Summary
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<span class="section-label">AI Executive Summary (Claude Sonnet)</span>', unsafe_allow_html=True)
+    st.markdown('<span class="section-label">Executive narrative</span>', unsafe_allow_html=True)
     with st.chat_message("assistant"):
         st.markdown(f"**Risk Score: {pct}/100 — {risk_tier}** (confidence {conf_p}%)\n\n{summary}")
 
@@ -1791,9 +2135,14 @@ def stage_risk_scoring(alert: dict) -> None:
 # STAGE 7 — HITL (calls POST /v1/investigate/hitl-recommendation)
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_hitl(alert: dict) -> None:
-    st.markdown('<span class="section-label">STAGE 7 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Human-in-the-Loop Review</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Workflow paused. Claude Sonnet provides a recommendation — the analyst makes the final decision.</div>', unsafe_allow_html=True)
+    stage_hero(
+        7,
+        "Human-in-the-loop control point",
+        "Material actions wait for an analyst. Gemini prepares a structured briefing; the disposition recorded here is what downstream settlement systems should trust.",
+        badge_label="Awaiting analyst",
+        badge_ok=False,
+        learning="This is the slide risk committees care about—separation of duties and non-repudiation.",
+    )
 
     rr    = alert.get("risk_result") or {}
     score = int(float(rr.get("final_risk_score", rr.get("risk_score", 0.9))) * 100)
@@ -1809,8 +2158,8 @@ def stage_hitl(alert: dict) -> None:
 
     # Get AI recommendation for analyst
     if not alert.get("hitl_ai_recommendation"):
-        if st.button("🤖 Get Claude Sonnet Recommendation for Analyst", key="get_hitl_rec"):
-            with st.spinner("Claude Sonnet preparing analyst briefing..."):
+        if st.button("Request analyst briefing (API)", key="get_hitl_rec"):
+            with st.spinner("Generating structured briefing via /v1/investigate/hitl-recommendation…"):
                 payload = {
                     "investigation_id": alert["investigation_id"],
                     "customer_id": alert["customer_id"],
@@ -1833,7 +2182,7 @@ def stage_hitl(alert: dict) -> None:
         rec_color  = "#ef4444" if rec_action=="CONFIRM_FRAUD" else "#10b981" if rec_action=="FALSE_POSITIVE" else "#f59e0b"
         st.markdown(
             f'<div style="background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:1rem 1.2rem;margin-bottom:1rem;">'
-            f'<div style="font-size:.8rem;font-weight:700;color:#c4b5fd;margin-bottom:.5rem;">🤖 Claude Sonnet Recommendation</div>'
+            f'<div style="font-size:.8rem;font-weight:700;color:#c4b5fd;margin-bottom:.5rem;">Model-assisted recommendation</div>'
             f'<div style="font-size:.9rem;font-weight:700;color:{rec_color};margin-bottom:.4rem;">{rec_action} (confidence {rec_conf}%)</div>'
             f'<div style="font-size:.82rem;color:#94a3b8;margin-bottom:.5rem;">{rec.get("analyst_briefing","")}</div>'
             f'</div>', unsafe_allow_html=True,
@@ -1874,14 +2223,14 @@ def stage_hitl(alert: dict) -> None:
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        if st.button("✅ Approve Transaction", use_container_width=True, key="hitl_approve"):
+        if st.button("Approve — false positive", use_container_width=True, key="hitl_approve"):
             alert["approved"] = True; alert["status"] = "CLOSED"
             alert["hitl_decision"] = {"decision": "FALSE_POSITIVE", "notes": notes}
             st.session_state.metrics["auto_closed"] += 1
             trace(f"HITL → FALSE_POSITIVE · notes={notes[:50]}")
             st.session_state.stage = 8; st.rerun()
     with c2:
-        if st.button("🔒 Confirm Freeze Account", type="primary", use_container_width=True, key="hitl_freeze"):
+        if st.button("Confirm fraud — hold account", type="primary", use_container_width=True, key="hitl_freeze"):
             alert["frozen"] = True; alert["status"] = "CLOSED"
             alert["hitl_decision"] = {"decision": "CONFIRM_FRAUD", "notes": notes}
             st.session_state.metrics["confirmed_fraud"] += 1
@@ -1889,7 +2238,7 @@ def stage_hitl(alert: dict) -> None:
             trace(f"HITL → CONFIRM_FRAUD · account={alert['customer_id']}")
             st.session_state.stage = 8; st.rerun()
     with c3:
-        if st.button("📋 Request More Info", use_container_width=True, key="hitl_more"):
+        if st.button("Request more information", use_container_width=True, key="hitl_more"):
             alert["status"] = "HITL"
             st.session_state.metrics["hitl_pending"] += 1
             trace(f"HITL → REQUEST_MORE_INFO · {alert['alert_id']}")
@@ -1901,9 +2250,14 @@ def stage_hitl(alert: dict) -> None:
 # STAGE 8 — RESOLUTION
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_resolution(alert: dict) -> None:
-    st.markdown('<span class="section-label">STAGE 8 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Final Resolution</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Resolution Engine executes actions independently. Each action logged. Fraud memory updated.</div>', unsafe_allow_html=True)
+    stage_hero(
+        8,
+        "Controlled remediation and memory updates",
+        "Actions are emitted through the resolution service so each step is idempotent, logged, and reversible in a real deployment. Fraud memory captures confirmed indicators for the next detection cycle.",
+        badge_label="Action engine",
+        badge_ok=True,
+        learning="Tie this slide to your change-management story: who approves reversals and how long records live.",
+    )
 
     frozen   = alert.get("frozen", False)
     approved = alert.get("approved", False)
@@ -1976,9 +2330,14 @@ def stage_resolution(alert: dict) -> None:
 # STAGE 9 — AUDIT TRAIL
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_audit(alert: dict | None) -> None:
-    st.markdown('<span class="section-label">STAGE 9 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Audit Trail &amp; Investigation Timeline</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Complete immutable record of every event, decision, and action — millisecond-precision timestamps.</div>', unsafe_allow_html=True)
+    stage_hero(
+        9,
+        "Immutable lineage for supervisors and auditors",
+        "Every API hop, model assist, analyst decision, and remediation hook lands in the trace. Export or pipe this feed into your SIEM for long-term retention.",
+        badge_label="Non-repudiation",
+        badge_ok=True,
+        learning="Ask which fields your regulator would sample first—timestamps, actor IDs, and model version metadata.",
+    )
 
     trail = st.session_state.audit_trail
 
@@ -2007,10 +2366,10 @@ def stage_audit(alert: dict | None) -> None:
     st.code("\n".join(f'[{e["timestamp"]}] {e["event"]}' for e in trail[-100:]), language="text")
 
     if alert and alert.get("agent_results"):
-        with st.expander("🗂 Agent Evidence Archive"):
+        with st.expander("Agent evidence archive (JSON)"):
             st.json(alert["agent_results"])
     if alert and alert.get("ai_synthesis"):
-        with st.expander("🤖 Full Claude Sonnet AI Synthesis"):
+        with st.expander("Model synthesis payload (JSON)"):
             st.json(alert["ai_synthesis"])
 
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -2022,9 +2381,14 @@ def stage_audit(alert: dict | None) -> None:
 # STAGE 10 — LIVE DASHBOARD
 # ─────────────────────────────────────────────────────────────────────────────
 def stage_live_dashboard() -> None:
-    st.markdown('<span class="section-label">STAGE 10 OF 10</span>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-header">Live Dashboard &amp; Monitoring</div>', unsafe_allow_html=True)
-    st.markdown('<div class="stage-subtext">Real-time metrics, active investigations, risk distribution, and fraud trends.</div>', unsafe_allow_html=True)
+    stage_hero(
+        10,
+        "Executive telemetry without losing operational truth",
+        "Roll-ups show how the program is trending while preserving drill-down paths to individual alerts—exactly the posture modern fraud COEs adopt.",
+        badge_label="Session rollup",
+        badge_ok=True,
+        learning="Close the loop: tie these metrics to staffing, queue ageing, and model drift reviews.",
+    )
 
     m = st.session_state.metrics
     alerts = st.session_state.alerts
@@ -2039,7 +2403,7 @@ def stage_live_dashboard() -> None:
         f'<div class="stat-card"><div class="stat-value" style="color:#10b981;">{m["auto_closed"]}</div><div class="stat-label">Auto-Closed</div></div>'
         f'<div class="stat-card"><div class="stat-value" style="color:#f59e0b;">{m["hitl_pending"]}</div><div class="stat-label">HITL Pending</div></div>'
         f'<div class="stat-card"><div class="stat-value" style="color:#ef4444;">{m["blocked"]}</div><div class="stat-label">Accts Blocked</div></div>'
-        f'<div class="stat-card"><div class="stat-value" style="color:#dc2626; font-weight: bold; font-size: 1.2rem;">{fraud_stopped}</div><div class="stat-label">💥 Total Fraud Stopped</div></div>'
+        f'<div class="stat-card"><div class="stat-value" style="color:#dc2626; font-weight: bold; font-size: 1.2rem;">{fraud_stopped}</div><div class="stat-label">Confirmed + blocked</div></div>'
         f'</div>', unsafe_allow_html=True,
     )
 
@@ -2109,7 +2473,7 @@ def stage_live_dashboard() -> None:
     if st.button("↩ Start New Investigation", type="primary", key="restart"):
         st.session_state.stage = 1
         st.session_state.selected_alert_id = None
-        trace("NARRATIVE_RESET → Stage 1")
+        trace("SESSION_RESET → Segment 01")
         st.rerun()
 
 
@@ -2117,172 +2481,84 @@ def stage_live_dashboard() -> None:
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 def main() -> None:
+    st.set_page_config(
+        page_title="Fraud investigation walkthrough · Agentic AI",
+        page_icon="🛡️",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
     init_state()
     st.markdown(CSS, unsafe_allow_html=True)
     render_sidebar()
 
-    # Premium Banking Header with KPI Cards
+    # Title is drawn in the Streamlit header bar via CSS (::after) so it stays visible and aligned with the menu.
+    st.caption("Walkthrough · FastAPI · use the sidebar to jump segments or reset the session.")
+
+    stage = st.session_state.stage
     m = st.session_state.metrics
     fraud_stopped = m["confirmed_fraud"] + m["blocked"]
-    
-    st.markdown('''
-    <div style="background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary)); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem 2rem; margin-bottom: 2rem; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);">
-        <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <div style="font-size: 2.2rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.03em; text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);">
-            🏛️ Andela Digital Bank
-            </div>
-            <div style="flex: 1;">
-                <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;">Agentic AI Fraud Investigator</div>
-            </div>
-        </div>
-    </div>
-    ''', unsafe_allow_html=True)
-
-    # KPI Cards at Top
-    st.markdown('''
-    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
-        <div class="kpi-card agent-card-animated">
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Total Alerts</div>
-            <div style="font-size: 2rem; font-weight: 800; color: var(--text-primary);">''' + str(m["total_alerts"]) + '''</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Last 24h</div>
-        </div>
-        <div class="kpi-card fraud agent-card-animated" style="animation-delay: 0.1s;">
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Fraud Stopped</div>
-            <div style="font-size: 2rem; font-weight: 800; color: var(--fraud);">''' + str(fraud_stopped) + '''</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">This session</div>
-        </div>
-        <div class="kpi-card success agent-card-animated" style="animation-delay: 0.2s;">
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Auto-Closed</div>
-            <div style="font-size: 2rem; font-weight: 800; color: var(--success);">''' + str(m["auto_closed"]) + '''</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">AI resolved</div>
-        </div>
-        <div class="kpi-card warning agent-card-animated" style="animation-delay: 0.3s;">
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">HITL Pending</div>
-            <div style="font-size: 2rem; font-weight: 800; color: var(--warning);">''' + str(m["hitl_pending"]) + '''</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Review needed</div>
-        </div>
-        <div class="kpi-card agent-card-animated" style="animation-delay: 0.4s;">
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Accounts Blocked</div>
-            <div style="font-size: 2rem; font-weight: 800; color: var(--fraud);">''' + str(m["blocked"]) + '''</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Protected</div>
-        </div>
-    </div>
-    ''', unsafe_allow_html=True)
-
-    # Compact Progress Timeline
-    stage = st.session_state.stage
-    st.markdown(f'''
-    <div class="progress-timeline">
-        <div class="progress-step {'active' if stage == 1 else 'completed' if stage > 1 else ''}">1</div>
-        <div class="progress-line {'completed' if stage > 1 else ''}"></div>
-        <div class="progress-step {'active' if stage == 2 else 'completed' if stage > 2 else ''}">2</div>
-        <div class="progress-line {'completed' if stage > 2 else ''}"></div>
-        <div class="progress-step {'active' if stage == 3 else 'completed' if stage > 3 else ''}">3</div>
-        <div class="progress-line {'completed' if stage > 3 else ''}"></div>
-        <div class="progress-step {'active' if stage == 4 else 'completed' if stage > 4 else ''}">4</div>
-        <div class="progress-line {'completed' if stage > 4 else ''}"></div>
-        <div class="progress-step {'active' if stage == 5 else 'completed' if stage > 5 else ''}">5</div>
-        <div class="progress-line {'completed' if stage > 5 else ''}"></div>
-        <div class="progress-step {'active' if stage == 6 else 'completed' if stage > 6 else ''}">6</div>
-        <div class="progress-line {'completed' if stage > 6 else ''}"></div>
-        <div class="progress-step {'active' if stage == 7 else 'completed' if stage > 7 else ''}">7</div>
-        <div class="progress-line {'completed' if stage > 7 else ''}"></div>
-        <div class="progress-step {'active' if stage == 8 else 'completed' if stage > 8 else ''}">8</div>
-        <div class="progress-line {'completed' if stage > 8 else ''}"></div>
-        <div class="progress-step {'active' if stage == 9 else 'completed' if stage > 9 else ''}">9</div>
-        <div class="progress-line {'completed' if stage > 9 else ''}"></div>
-        <div class="progress-step {'active' if stage == 10 else 'completed' if stage > 10 else ''}">10</div>
-    </div>
-    <div style="text-align: center; margin-top: 0.5rem;">
-        <span style="font-size: 0.9rem; color: var(--text-secondary);">Stage {stage}: {STAGE_LABELS[stage-1]}</span>
-    </div>
-    ''', unsafe_allow_html=True)
-
-    # Add Live Activity Feed and Agent Progress
-    if stage >= 3:  # Show activity feed once alerts are generated
-        col1, col2 = st.columns([2, 1])
-        
-        with col2:
-            # Live Activity Feed
-            st.markdown('<span class="section-label">Live Activity Feed</span>', unsafe_allow_html=True)
-            recent_activity = st.session_state.audit_trail[-10:]
-            activity_html = ""
-            for event in reversed(recent_activity):
-                activity_html += f'''
-                <div class="activity-item">
-                    <div style="color: var(--text-primary); margin-bottom: 0.25rem;">{event["event"]}</div>
-                    <div class="timestamp">{event["timestamp"]}</div>
-                </div>
-                '''
-            st.markdown(f'<div class="activity-feed">{activity_html}</div>', unsafe_allow_html=True)
-            
-            # Agent Progress Cards (show during agent investigation)
-            if stage == 5 and alert and alert.get("triage_result"):
-                st.markdown('<span class="section-label" style="margin-top: 1rem;">Agent Investigation</span>', unsafe_allow_html=True)
-                
-                agents = [
-                    ("⚡ Transaction Agent", "running", 75),
-                    ("🔍 KYC/Device Agent", "pending", 0), 
-                    ("🚫 Sanctions Agent", "pending", 0)
-                ]
-                
-                for agent_name, status, progress in agents:
-                    status_class = f"status-{status}"
-                    progress_class = "success" if status == "completed" else "warning" if status == "running" else ""
-                    
-                    st.markdown(f'''
-                    <div class="agent-progress agent-card-animated">
-                        <div class="agent-header">
-                            <div class="agent-name">{agent_name}</div>
-                            <div class="agent-status {status_class}">{status}</div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill {progress_class}" style="width: {progress}%"></div>
-                        </div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">{progress}% complete</div>
-                    </div>
-                    ''', unsafe_allow_html=True)
-
-    tab_demo, tab_audit_raw = st.tabs(["🔍 Investigation Demo", "📋 Audit Trace"])
-
     alert = next((a for a in st.session_state.alerts if a["alert_id"] == st.session_state.selected_alert_id), None)
 
+    tab_demo, tab_audit_raw = st.tabs(["Walkthrough", "Event log"])
+
     def _gate(msg: str) -> None:
-        st.markdown(f'<div class="hitl-alert"><div class="hitl-title">⚠ Step Required</div><div class="hitl-body">{msg}</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="demo-gate"><div class="demo-gate-title">Complete the prior segment</div>'
+            f'<div class="demo-gate-body">{msg}</div></div>',
+            unsafe_allow_html=True,
+        )
 
     with tab_demo:
-        if stage == 1:   stage_data_sources()
-        elif stage == 2: stage_generate_alert()
-        elif stage == 3: stage_alerts_queue()
+        st.caption(f"**{stage}/10** · {STAGE_LABELS[stage - 1]}")
+        if stage == 1:
+            stage_data_sources()
+        elif stage == 2:
+            stage_generate_alert()
+        elif stage == 3:
+            stage_alerts_queue()
         elif stage == 4:
-            if not alert: _gate("Select an alert from Stage 3 first.")
-            else: stage_triage(alert)
+            if not alert:
+                _gate("Select an alert from <b>Segment 03 — Operations queue</b> before triage.")
+            else:
+                stage_triage(alert)
         elif stage == 5:
-            if not alert or not alert.get("triage_result"): _gate("Complete triage in Stage 4 first.")
-            else: stage_agents(alert)
+            if not alert or not alert.get("triage_result"):
+                _gate("Run triage in <b>Segment 04</b> so agents receive a routed case.")
+            else:
+                stage_agents(alert)
         elif stage == 6:
-            if not alert or not alert.get("agent_results"): _gate("Run agents in Stage 5 first.")
-            else: stage_risk_scoring(alert)
+            if not alert or not alert.get("agent_results"):
+                _gate("Execute the parallel agents in <b>Segment 05</b> to populate evidence.")
+            else:
+                stage_risk_scoring(alert)
         elif stage == 7:
-            if not alert or not alert.get("risk_result"): _gate("Complete risk scoring in Stage 6 first.")
-            else: stage_hitl(alert)
+            if not alert or not alert.get("risk_result"):
+                _gate("Complete hybrid scoring in <b>Segment 06</b> before analyst review.")
+            else:
+                stage_hitl(alert)
         elif stage == 8:
-            if not alert: _gate("Complete HITL in Stage 7 first.")
-            else: stage_resolution(alert)
-        elif stage == 9: stage_audit(alert)
-        elif stage == 10: stage_live_dashboard()
+            if not alert:
+                _gate("Record an analyst disposition in <b>Segment 07</b> before remediation.")
+            else:
+                stage_resolution(alert)
+        elif stage == 9:
+            stage_audit(alert)
+        elif stage == 10:
+            stage_live_dashboard()
+
+        render_post_segment_chrome(stage, m, fraud_stopped)
 
     with tab_audit_raw:
-        st.markdown('<span class="section-label">Full Audit Trace</span>', unsafe_allow_html=True)
+        st.markdown('<span class="section-label">Append-only trace (export friendly)</span>', unsafe_allow_html=True)
         st.code("\n".join(f'[{e["timestamp"]}] {e["event"]}' for e in st.session_state.audit_trail[-150:]), language="text")
     
-    # Andela Branding Footer
-    st.markdown('''
-    <div class="footer-branding">
-        <div style="font-weight: 700; color: var(--gold); margin-bottom: 0.5rem;">MVP v4.0 – Andela Bootcamp Showcase</div>
-        <div style="font-size: 0.8rem; color: #64748b;">Powered by Cerebras AI + LangGraph Orchestration</div>
-    </div>
-    ''', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="footer-branding" style="margin-top:2rem;padding-top:1rem;border-top:1px solid #1a2d45;">'
+        '<div style="font-weight:700;color:#cbd5e1;margin-bottom:.35rem;">Reference implementation · not production advice</div>'
+        '<div style="font-size:0.78rem;color:#64748b;">Configure <code>FRAUD_API_BASE</code> and <code>API_KEY</code> to point at your FastAPI instance.</div>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 if __name__ == "__main__":

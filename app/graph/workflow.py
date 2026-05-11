@@ -1,4 +1,4 @@
-"""LangGraph workflow definition - Clean Architecture Implementation."""
+"""LangGraph workflow definition."""
 
 from typing import Dict, Any, List, Callable
 from datetime import datetime
@@ -10,7 +10,7 @@ from langgraph.graph import StateGraph
 
 from app.core.logging import get_logger
 from app.shared.enums import InvestigationStatus, NodeType, EdgeType
-from app.shared.models import InvestigationState, WorkflowNode, WorkflowEdge
+from app.shared.models import InvestigationWorkflowState, WorkflowNode, WorkflowEdge
 from app.graph.scoring import calculate_risk_score
 
 logger = get_logger(__name__)
@@ -31,7 +31,7 @@ class WorkflowExecutor:
         return self.semaphores[key]
         
     async def execute_node_with_semaphore(self, node: WorkflowNode, 
-                                     state: InvestigationState) -> Dict[str, Any]:
+                                     state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Execute workflow node with semaphore control."""
         semaphore = await self._acquire_semaphore(node.semaphore_key) if node.semaphore_key else None
         
@@ -46,7 +46,7 @@ class WorkflowExecutor:
             raise
         
     async def _execute_node_with_retry(self, node: WorkflowNode, 
-                                  state: InvestigationState) -> Dict[str, Any]:
+                                  state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Execute node with retry mechanism."""
         last_exception = None
         
@@ -76,7 +76,7 @@ class WorkflowExecutor:
         
         raise Exception(f"Node {node.node_id} failed after {node.max_retries} attempts: {last_exception}")
     
-    def _evaluate_condition(self, condition: str, state: InvestigationState) -> bool:
+    def _evaluate_condition(self, condition: str, state: InvestigationWorkflowState) -> bool:
         """Evaluate routing condition."""
         try:
             if condition.startswith("risk_score >"):
@@ -108,7 +108,7 @@ class LangGraphWorkflow:
         
     def _build_workflow_graph(self) -> StateGraph:
         """Build LangGraph with nodes and edges."""
-        workflow = StateGraph(InvestigationState)
+        workflow = StateGraph(InvestigationWorkflowState)
         
         # Define nodes
         nodes = {
@@ -210,12 +210,12 @@ class LangGraphWorkflow:
         
         return workflow
     
-    async def _start_investigation(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _start_investigation(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Start investigation process."""
         logger.info(f"Starting investigation for case {state.case_id}")
         return {"status": "investigation_started", "timestamp": datetime.utcnow().isoformat()}
     
-    async def _analyze_transactions(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _analyze_transactions(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Analyze transactions for fraud patterns."""
         logger.info(f"Analyzing transactions for case {state.case_id}")
         
@@ -229,7 +229,7 @@ class LangGraphWorkflow:
         
         return {"anomalies": all_anomalies, "transaction_count": len(state.transaction_data)}
     
-    async def _analyze_kyc(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _analyze_kyc(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Analyze KYC data for device and geo anomalies."""
         logger.info(f"Analyzing KYC for case {state.case_id}")
         
@@ -243,7 +243,7 @@ class LangGraphWorkflow:
         
         return {"kyc_anomalies": all_kyc_anomalies, "kyc_events_count": len(state.kyc_data)}
     
-    async def _check_sanctions(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _check_sanctions(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Check sanctions for entities."""
         logger.info(f"Checking sanctions for case {state.case_id}")
         
@@ -258,7 +258,7 @@ class LangGraphWorkflow:
         
         return {"sanctions_hits": all_sanctions, "entities_checked": len(state.entities)}
     
-    async def _score_risk(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _score_risk(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Calculate overall risk score."""
         logger.info(f"Calculating risk score for case {state.case_id}")
         
@@ -277,7 +277,7 @@ class LangGraphWorkflow:
             "factors": result.factors
         }
     
-    async def _make_decision(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _make_decision(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Make investigation decision based on risk score."""
         logger.info(f"Making decision for case {state.case_id}")
         
@@ -293,7 +293,7 @@ class LangGraphWorkflow:
         
         return {"decision": decision, "new_status": state.status.value}
     
-    async def _start_detailed_investigation(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _start_detailed_investigation(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Start detailed investigation."""
         logger.info(f"Starting detailed investigation for case {state.case_id}")
         
@@ -302,7 +302,7 @@ class LangGraphWorkflow:
         
         return {"investigation_started": True, "investigator_id": state.investigator_id}
     
-    async def _escalate_case(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _escalate_case(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Escalate case to higher level."""
         logger.warning(f"Escalating case {state.case_id}")
         
@@ -312,7 +312,7 @@ class LangGraphWorkflow:
         
         return {"escalated": True, "escalated_to": state.escalated_to}
     
-    async def _resolve_case(self, state: InvestigationState) -> Dict[str, Any]:
+    async def _resolve_case(self, state: InvestigationWorkflowState) -> Dict[str, Any]:
         """Resolve investigation case."""
         logger.info(f"Resolving case {state.case_id}")
         
@@ -322,13 +322,13 @@ class LangGraphWorkflow:
         
         return {"resolved": True, "resolution_notes": state.resolution_notes}
     
-    async def execute_workflow(self, initial_state: InvestigationState) -> InvestigationState:
+    async def execute_workflow(self, initial_state: InvestigationWorkflowState) -> InvestigationWorkflowState:
         """Execute complete fraud investigation workflow."""
         logger.info(f"Executing workflow for case {initial_state.case_id}")
         
         try:
             result = await self.compiled_graph.ainvoke(initial_state)
-            final_state = InvestigationState(**result)
+            final_state = InvestigationWorkflowState(**result)
             final_state.status = InvestigationStatus.COMPLETED
             return final_state
         except Exception as e:
@@ -347,7 +347,7 @@ def get_fraud_workflow() -> LangGraphWorkflow:
     return fraud_workflow
 
 
-async def execute_fraud_workflow(initial_state: InvestigationState) -> InvestigationState:
+async def execute_fraud_workflow(initial_state: InvestigationWorkflowState) -> InvestigationWorkflowState:
     """Execute fraud investigation workflow."""
     workflow = get_fraud_workflow()
     return await workflow.execute_workflow(initial_state)

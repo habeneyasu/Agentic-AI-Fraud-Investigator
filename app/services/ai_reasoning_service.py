@@ -1,6 +1,4 @@
-"""
-AI Reasoning and Risk Scoring Service - Clean Architecture Implementation.
-"""
+"""AI-assisted reasoning and risk scoring."""
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -12,7 +10,7 @@ from app.shared.enums import RiskLevel, FraudPattern, AnomalyType, SanctionType
 from app.shared.models import RiskFactor, ScoringResult
 
 
-class AIReasoningService(BaseService):
+class InvestigationReasoningService(BaseService):
     """AI reasoning service for fraud investigation analysis."""
     
     def __init__(self):

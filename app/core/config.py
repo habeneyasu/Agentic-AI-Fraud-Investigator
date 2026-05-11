@@ -1,21 +1,26 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List, Optional
+
 from pydantic import Field
-from typing import Optional, List
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Runtime configuration loaded from environment and optional `.env` file."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore"
+        extra="ignore",
     )
-    
-    # Application
-    app_name: str = "Agentic AI Fraud Investigator"
-    app_version: str = "1.0.0"
-    debug: bool = False
-    environment: str = "development"
+
+    app_name: str = Field(default="Agentic AI Fraud Investigator", description="Service name in logs and /health.")
+    app_version: str = Field(default="1.0.0", description="Semantic version exposed on /health.")
+    debug: bool = Field(default=False, description="Enable verbose diagnostics (never use in production).")
+    environment: str = Field(
+        default="development",
+        description="Deployment stage: development, staging, production, etc.",
+    )
     
     # Database
     database_url: str = Field(
@@ -46,6 +51,11 @@ class Settings(BaseSettings):
     )
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    api_key: str = Field(
+        default="dev-secret-api-key",
+        env="API_KEY",
+        description="Shared secret required in the X-API-Key header for protected routes.",
+    )
     
     # Fraud Detection Settings
     risk_score_threshold: float = 0.7
@@ -95,24 +105,27 @@ def get_settings() -> Settings:
     return settings
 
 
-# Database configuration
-class DatabaseConfig:
+class DatabaseConnectionSettings:
+    """Read-only SQLAlchemy-style pool defaults (extend when persisting investigations)."""
+
     url = settings.database_url
     echo = settings.debug
     pool_size = 10
     max_overflow = 20
 
 
-# Redis configuration
-class RedisConfig:
+class RedisClientSettings:
+    """Read-only Redis client defaults for caching / task brokers."""
+
     url = settings.redis_url
     decode_responses = True
     socket_connect_timeout = 5
     socket_timeout = 5
 
 
-# LLM configuration
-class LLMConfig:
+class LlmProviderSettings:
+    """Resolved LLM credentials and model identifiers for orchestration code."""
+
     openai_api_key = settings.openai_api_key
     anthropic_api_key = settings.anthropic_api_key
     cerebras_api_key = settings.cerebras_api_key
@@ -125,15 +138,9 @@ class LLMConfig:
     max_tokens = 4000
 
 
-# Security configuration
-class SecurityConfig:
-    secret_key = settings.secret_key
-    algorithm = settings.algorithm
-    access_token_expire_minutes = settings.access_token_expire_minutes
+class LangSmithObservabilitySettings:
+    """LangSmith tracing toggles (optional)."""
 
-
-# LangSmith configuration
-class LangSmithConfig:
     enabled = settings.langsmith_enabled
     api_key = settings.langsmith_api_key
     project = settings.langsmith_project

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agentic-fraud-investigator"
 version = "0.1.0"
-description = "Agentic AI Fraud Investigator — Andela Digital Bank"
+description = "Agentic AI Fraud Investigator — fraud ops reference API"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi==0.111.0",

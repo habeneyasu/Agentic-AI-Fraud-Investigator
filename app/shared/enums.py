@@ -1,13 +1,10 @@
-"""
-Centralized enums for the fraud investigation system.
-"""
+"""Domain enumerations for fraud investigations, triage, and compliance."""
 
 from enum import Enum
 
 
-# Core System Enums
 class RiskLevel(str, Enum):
-    """Risk level classification."""
+    """Customer / transaction risk tier."""
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -15,15 +12,15 @@ class RiskLevel(str, Enum):
 
 
 class InvestigationStatus(str, Enum):
-    """Investigation status."""
+    """Lifecycle status for an investigation record."""
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CLOSED = "closed"
 
 
-class Priority(str, Enum):
-    """Priority levels."""
+class CasePriority(str, Enum):
+    """Routing priority from rules-based triage (distinct from alert triage tier)."""
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"

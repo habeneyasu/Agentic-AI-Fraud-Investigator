@@ -1,8 +1,4 @@
-"""
-POST /v1/investigate — Full end-to-end investigation endpoint.
-Runs transaction, KYC, and sanctions agents in parallel,
-then calls Claude Sonnet for AI synthesis and risk scoring.
-"""
+"""Investigation endpoints: triage, full parallel-agent run, HITL recommendation."""
 
 from __future__ import annotations
 
@@ -11,33 +7,29 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Security
-from fastapi.security.api_key import APIKeyHeader
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from app.core.config import settings
+from app.api.deps import RequireApiKey
 from app.core.logging import get_logger
 from app.data.data_loader import DataLoader
 from app.services.transaction_service import TransactionService
 from app.services.kyc_service import KYCService
 from app.services.sanctions_service import SanctionsService
-from app.services.ai_reasoning_service import AIReasoningService
+from app.services.ai_reasoning_service import InvestigationReasoningService
 from app.llm.orchestration import synthesize_investigation, triage_alert, get_hitl_recommendation
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["investigate"])
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 _data_loader = DataLoader()
-_tx_service   = TransactionService()
-_kyc_service  = KYCService()
-_san_service  = SanctionsService()
-_ai_service   = AIReasoningService()
+_tx_service = TransactionService()
+_kyc_service = KYCService()
+_san_service = SanctionsService()
+_ai_service = InvestigationReasoningService()
 
 
-# ── Request / Response models ─────────────────────────────────────────────────
-
-class InvestigateRequest(BaseModel):
+class FullInvestigationApiRequest(BaseModel):
     transaction_id: str
     customer_id: str
     amount: float
@@ -50,7 +42,7 @@ class InvestigateRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class TriageRequest(BaseModel):
+class OrchestratedTriageApiRequest(BaseModel):
     alert_id: str
     customer_id: str
     amount: float
@@ -60,7 +52,7 @@ class TriageRequest(BaseModel):
     risk_indicators: list[str] = Field(default_factory=list)
 
 
-class HITLRecommendationRequest(BaseModel):
+class AnalystBriefingApiRequest(BaseModel):
     investigation_id: str
     customer_id: str
     amount: float
@@ -69,20 +61,8 @@ class HITLRecommendationRequest(BaseModel):
     risk_result: dict[str, Any]
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
-
 @router.post("/investigate/triage")
-async def run_triage(
-    request: TriageRequest,
-    x_api_key: str | None = Security(api_key_header),
-):
-    """
-    Run AI-powered triage on an alert.
-    Uses Claude Haiku for fast classification.
-    """
-    if x_api_key != settings.api_key:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
+async def run_triage(request: OrchestratedTriageApiRequest, _: None = RequireApiKey):
     customer_context = _data_loader.get_customer_context(request.customer_id) or {}
 
     alert_data = {
@@ -100,22 +80,7 @@ async def run_triage(
 
 
 @router.post("/investigate/full")
-async def run_full_investigation(
-    request: InvestigateRequest,
-    x_api_key: str | None = Security(api_key_header),
-):
-    """
-    Run full parallel agent investigation + Claude Sonnet AI synthesis.
-
-    Steps:
-    1. Load customer context from data store
-    2. Run Transaction, KYC, Sanctions agents in parallel (asyncio.gather)
-    3. Call Claude Sonnet to synthesize all findings
-    4. Return structured result with risk score, evidence chain, and AI reasoning
-    """
-    if x_api_key != settings.api_key:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
+async def run_full_investigation(request: FullInvestigationApiRequest, _: None = RequireApiKey):
     investigation_id = f"inv_{uuid.uuid4().hex[:12]}"
     logger.info(f"Starting full investigation {investigation_id} for {request.customer_id}")
 
@@ -173,7 +138,6 @@ async def run_full_investigation(
     kyc_result = _safe(kyc_resp, "KYC")
     san_result = _safe(san_resp, "Sanctions")
 
-    # ── AI synthesis via Claude Sonnet ────────────────────────────────────────
     ai_synthesis = await synthesize_investigation(
         transaction_result=tx_result,
         kyc_result=kyc_result,
@@ -181,7 +145,6 @@ async def run_full_investigation(
         customer_context=customer_context,
     )
 
-    # ── Rule-based AI reasoning service (backup scoring) ─────────────────────
     agent_findings = {
         "transaction_analysis": [tx_result] if tx_result else [],
         "kyc_analysis":         [kyc_result] if kyc_result else [],
@@ -230,15 +193,9 @@ async def run_full_investigation(
 
 @router.post("/investigate/hitl-recommendation")
 async def get_hitl_recommendation_endpoint(
-    request: HITLRecommendationRequest,
-    x_api_key: str | None = Security(api_key_header),
+    request: AnalystBriefingApiRequest,
+    _: None = RequireApiKey,
 ):
-    """
-    Get Claude Sonnet recommendation for the human analyst before they decide.
-    """
-    if x_api_key != settings.api_key:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
     summary = {
         "investigation_id":    request.investigation_id,
         "customer_id":         request.customer_id,
@@ -252,4 +209,4 @@ async def get_hitl_recommendation_endpoint(
 
 @router.get("/investigate/health")
 async def investigate_health():
-    return {"status": "ok", "endpoint": "investigate", "llm": "anthropic/claude"}
+    return {"status": "ok", "endpoint": "investigate"}
