@@ -1,9 +1,31 @@
 """Risk Scoring Engine - Domain logic for calculating alert risk scores."""
 
-from datetime import datetime
-from typing import Dict, Any
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Tuple
 
 from app.models.triage import AlertPolicy, AlertSeverity, RiskScore
+
+# Transactions older than this many days get a recency penalty
+_RECENCY_PENALTY_DAYS = 30
+_RECENCY_PENALTY_FACTOR = 0.85  # multiply raw score by this if stale
+
+
+def _recency_penalty(alert) -> Tuple[float, bool]:
+    """Return (multiplier, penalty_applied). Stale alerts get 0.85× their raw score."""
+    ts = getattr(alert, "timestamp", None) or alert.metadata.get("timestamp")
+    if not ts:
+        return 1.0, False
+    try:
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age_days = (datetime.now(timezone.utc) - ts).days
+        if age_days > _RECENCY_PENALTY_DAYS:
+            return _RECENCY_PENALTY_FACTOR, True
+    except Exception:
+        pass
+    return 1.0, False
 
 
 class RiskScoringEngine:
@@ -41,41 +63,45 @@ class RiskScoringEngine:
     def score(self, alert) -> RiskScore:
         """
         Calculate risk score for an alert based on policy type and metadata.
-        
-        Args:
-            alert: Alert object to score
-            
-        Returns:
-            RiskScore with calculated score, severity, and metadata
+        Applies a recency penalty (×0.85) for transactions older than 30 days.
         """
         policy = alert.metadata.get("policy", "")
         score = 0.0
         scoring_factors = {}
-        
+
         if policy == AlertPolicy.HIGH_VALUE_TRANSACTION:
             score, factors = self._score_high_value_transaction(alert.amount)
             scoring_factors.update(factors)
-            
+
         elif policy == AlertPolicy.NEW_DEVICE_LOGIN:
             anomaly_type = alert.metadata.get("anomaly_type", "")
             score, factors = self._score_device_login(anomaly_type)
             scoring_factors.update(factors)
-            
+
         elif policy == AlertPolicy.SANCTIONED_COUNTRY:
             sanctioned_country = alert.metadata.get("sanctioned_country", "")
             score, factors = self._score_sanctioned_country(sanctioned_country)
             scoring_factors.update(factors)
-        
+
+        # Apply recency penalty for stale transactions
+        multiplier, penalty_applied = _recency_penalty(alert)
+        if penalty_applied:
+            score = score * multiplier
+            scoring_factors["recency_penalty_applied"] = True
+            scoring_factors["recency_penalty_factor"] = multiplier
+        else:
+            scoring_factors["recency_penalty_applied"] = False
+
         # Determine severity
         severity = self._determine_severity(score)
         auto_close_eligible = score < 0.6
-        
+
         return RiskScore(
             score=round(score, 3),
             severity=severity,
             auto_close_eligible=auto_close_eligible,
-            assessment_timestamp=datetime.utcnow(),
-            scoring_factors=scoring_factors
+            assessment_timestamp=datetime.now(timezone.utc),
+            scoring_factors=scoring_factors,
         )
     
     def _score_high_value_transaction(self, amount: float) -> tuple[float, Dict[str, Any]]:

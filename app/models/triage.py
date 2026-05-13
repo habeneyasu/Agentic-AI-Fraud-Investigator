@@ -58,6 +58,14 @@ class AssessedAlert(BaseModel):
         ...,
         description="Workflow state after triage: ``CLOSED`` (AUTO_CLOSE), ``MONITORING`` (MONITOR), ``OPEN_FOR_INVESTIGATION`` (ESCALATE_FOR_INVESTIGATION).",
     )
+    sanctions_hits: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Populated for SANCTIONED_COUNTRY policy: list of matched sanctions indicators with country code, tier, and critical flag.",
+    )
+    recency_penalty_applied: bool = Field(
+        default=False,
+        description="True when the transaction timestamp is older than 30 days and a recency penalty was applied to the raw score.",
+    )
     initial_suspicion_note: Optional[str] = Field(
         default=None,
         description="Phase-1 narrative: human-readable explanation of why deterministic triage fired.",

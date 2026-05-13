@@ -7,9 +7,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.deps import RequireAnalyst, RequireApiKey
+from app.api.fraud_memory import fraud_memory_service
 from app.core.logging import get_logger
 from app.services.action_engine import ActionEngine
 from app.services.ai_reasoning_service import InvestigationReasoningService
+from app.shared.enums import DecisionType, FraudPattern
 from app.shared.models import ActionRequest, ActionResult, AnalystCaseDecision
 
 logger = get_logger(__name__)
@@ -157,6 +159,34 @@ async def submit_analyst_review(
 
     logger.info("Analyst review submitted", investigation_id=investigation_id, decision=request.decision)
 
+    dec = request.decision or "REVIEW"
+    if dec in ("APPROVE", "ESCALATE", "REJECT"):
+        cust = investigation_data["customer_id"]
+        risk = float(investigation_data.get("risk_score", 0.75))
+        conf = float(investigation_data.get("ai_reasoning", {}).get("confidence", 0.75))
+        pt = FraudPattern.VELOCITY_ANOMALY.value
+        if dec == "ESCALATE":
+            pt = FraudPattern.KNOWN_FRAUDSTER.value
+        elif dec == "REJECT":
+            pt = FraudPattern.LOCATION_ANOMALY.value
+            risk = min(risk, 0.35)
+        elif dec == "APPROVE":
+            risk = min(risk, 0.22)
+        await fraud_memory_service.persist_hitl_outcome(
+            entity_id=cust,
+            entity_type="customer",
+            risk_score=risk,
+            confidence=conf,
+            pattern_type=pt,
+            metadata={
+                "source": "hitl_analyst_review",
+                "investigation_id": investigation_id,
+                "analyst_decision": dec,
+                "analyst_id": request.analyst_id,
+                "final_decision": analyst_decision.get("final_decision"),
+            },
+        )
+
     return AnalystReviewResponse(
         success=True,
         investigation_id=investigation_id,
@@ -174,9 +204,9 @@ async def submit_decision(
     __: None = RequireAnalyst,
 ):
     status_map = {
-        "CONFIRM_FRAUD": "RESOLUTION_IN_PROGRESS",
-        "FALSE_POSITIVE": "CLOSED_FALSE_POSITIVE",
-        "REQUEST_MORE_INFO": "AWAITING_HUMAN",
+        DecisionType.CONFIRM_FRAUD: "RESOLUTION_IN_PROGRESS",
+        DecisionType.FALSE_POSITIVE: "CLOSED_FALSE_POSITIVE",
+        DecisionType.REQUEST_MORE_INFO: "AWAITING_HUMAN",
     }
     logger.info(
         "HITL decision received",
@@ -184,10 +214,46 @@ async def submit_decision(
         decision=payload.decision,
         analyst=payload.analyst_id,
     )
+    inv = await _build_investigation_review_payload(investigation_id)
+    cust = inv["customer_id"]
+    risk = float(inv.get("risk_score", 0.8))
+    conf = float(inv.get("ai_reasoning", {}).get("confidence", 0.75))
+
+    if payload.decision == DecisionType.CONFIRM_FRAUD:
+        await fraud_memory_service.persist_hitl_outcome(
+            entity_id=cust,
+            entity_type="customer",
+            risk_score=max(risk, 0.85),
+            confidence=conf,
+            pattern_type=FraudPattern.KNOWN_FRAUDSTER.value,
+            metadata={
+                "source": "hitl_decision",
+                "investigation_id": investigation_id,
+                "decision": payload.decision.value,
+                "analyst_id": payload.analyst_id,
+                "notes": payload.notes,
+            },
+        )
+    elif payload.decision == DecisionType.FALSE_POSITIVE:
+        await fraud_memory_service.persist_hitl_outcome(
+            entity_id=cust,
+            entity_type="customer",
+            risk_score=min(risk, 0.25),
+            confidence=min(conf, 0.5),
+            pattern_type=FraudPattern.SYNTHETIC_IDENTITY.value,
+            metadata={
+                "source": "hitl_decision",
+                "investigation_id": investigation_id,
+                "decision": payload.decision.value,
+                "analyst_id": payload.analyst_id,
+                "notes": payload.notes,
+            },
+        )
+
     return {
         "investigation_id": investigation_id,
         "status": status_map[payload.decision],
-        "decision": payload.decision,
+        "decision": payload.decision.value,
     }
 
 

@@ -1,4 +1,5 @@
 """Investigation API (``/v1``): ``customer-langgraph-deep``, ``hitl-recommendation``, ``health``.
+Successful LLM HITL briefing persists a row via ``/v1/fraud-memory`` (see ``persist_fraud_memory`` on the request body).
 Triage: ``POST /v1/triage/assess`` in ``app/api/triage.py``."""
 
 from __future__ import annotations
@@ -11,13 +12,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.deps import RequireApiKey
+from app.api.fraud_memory import fraud_memory_service
 from app.core.logging import get_logger
 from app.data.data_loader import DataLoader
 from app.graph.workflow import execute_fraud_workflow
 from app.llm.orchestration import get_hitl_recommendation, synthesize_investigation
 from app.models.alert import Alert, AlertFilter
 from app.repositories.alert_repository import AlertRepository
-from app.shared.enums import TriagePriority
+from app.shared.enums import FraudPattern, TriagePriority
 from app.shared.models import InvestigationWorkflowState
 
 logger = get_logger(__name__)
@@ -53,6 +55,7 @@ class CustomerLangGraphDeepRequest(BaseModel):
     customer_id: str
     alert_id: str | None = None
     include_hitl_recommendation: bool = True
+    persist_fraud_memory: bool = True
 
 
 def _full_investigation_request_from_alert(alert: Alert) -> FullInvestigationApiRequest:
@@ -213,6 +216,7 @@ async def _run_langgraph_with_deep_synthesis(
     *,
     investigation_id: str | None = None,
     include_hitl_recommendation: bool = True,
+    persist_fraud_memory: bool = True,
 ) -> dict[str, Any]:
     inv_id, final, customer_context = await _langgraph_final_state(request, investigation_id)
     graph_dump = final.model_dump(mode="json")
@@ -253,6 +257,20 @@ async def _run_langgraph_with_deep_synthesis(
             logger.warning("hitl_recommendation_failed", error=str(e))
             hitl_rec = None
 
+    if persist_fraud_memory and hitl_rec is not None:
+        await fraud_memory_service.persist_hitl_outcome(
+            entity_id=request.customer_id,
+            entity_type="customer",
+            risk_score=float(risk_result["final_risk_score"]),
+            confidence=float(risk_result["confidence"]),
+            pattern_type=FraudPattern.VELOCITY_ANOMALY.value,
+            metadata={
+                "source": "investigation_llm_hitl",
+                "investigation_id": inv_id,
+                "transaction_id": request.transaction_id,
+            },
+        )
+
     return {
         "success": True,
         "engine": "langgraph_deep_synthesis",
@@ -282,6 +300,7 @@ async def customer_langgraph_deep_investigation(
     out = await _run_langgraph_with_deep_synthesis(
         req,
         include_hitl_recommendation=body.include_hitl_recommendation,
+        persist_fraud_memory=body.persist_fraud_memory,
     )
     return {"alert_id": alert.alert_id, "phase": "customer_langgraph_deep", **out}
 
@@ -298,6 +317,17 @@ async def get_hitl_recommendation_endpoint(
         "destination_country": request.destination_country,
     }
     result = await get_hitl_recommendation(summary, request.agent_results, request.risk_result)
+    await fraud_memory_service.persist_hitl_outcome(
+        entity_id=request.customer_id,
+        entity_type="customer",
+        risk_score=float(request.risk_result.get("final_risk_score", 0.65)),
+        confidence=float(request.risk_result.get("confidence", 0.7)),
+        pattern_type=FraudPattern.VELOCITY_ANOMALY.value,
+        metadata={
+            "source": "hitl_recommendation_endpoint",
+            "investigation_id": request.investigation_id,
+        },
+    )
     return {"success": True, "data": result}
 
 

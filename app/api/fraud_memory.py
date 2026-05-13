@@ -18,6 +18,19 @@ router = APIRouter(tags=["fraud_memory"])
 fraud_memory_service = FraudMemoryService()
 
 
+@router.get("/fraud-memory/patterns")
+async def list_fraud_memories(
+    limit: int = Query(200, ge=1, le=2000),
+    active_only: bool = Query(True),
+    _: None = RequireApiKey,
+):
+    """All stored fraud-memory patterns (newest first)."""
+    response = fraud_memory_service.list_all_patterns(limit=limit, active_only=active_only)
+    if not response["success"]:
+        raise HTTPException(status_code=500, detail=response["data"].get("error"))
+    return {"success": True, "data": response["data"]}
+
+
 @router.post("/fraud-memory/patterns", response_model=FraudPatternResponse)
 async def add_fraud_pattern(request: FraudPatternRequest, _: None = RequireApiKey):
     response = await fraud_memory_service.add_pattern(
@@ -78,7 +91,7 @@ async def update_pattern_frequency(memory_id: str, _: None = RequireApiKey):
 
 @router.post("/fraud-memory/cleanup")
 async def cleanup_expired_patterns(_: None = RequireApiKey):
-    response = await fraud_memory_service.cleanup_expired()
+    response = fraud_memory_service.cleanup_expired()
     if not response["success"]:
         raise HTTPException(status_code=500, detail=response["data"].get("error"))
     return response["data"]

@@ -217,6 +217,20 @@ class TriageService:
 
             alert.metadata.update(md_update)
 
+            # Build sanctions_hits array for SANCTIONED_COUNTRY policy
+            sanctions_hits: List[Dict[str, Any]] = []
+            if alert.metadata.get("policy") == AlertPolicy.SANCTIONED_COUNTRY.value:
+                sf = risk_score.scoring_factors
+                country = sf.get("sanctioned_country") or alert.metadata.get("sanctioned_country", "")
+                if country:
+                    sanctions_hits = [{
+                        "country_code": country,
+                        "country_tier": sf.get("country_tier", "unknown"),
+                        "critical_sanctions": sf.get("critical_sanctions", False),
+                        "risk_score": risk_score.score,
+                        "policy": AlertPolicy.SANCTIONED_COUNTRY.value,
+                    }]
+
             assessed_alert = AssessedAlert(
                 alert_id=alert.alert_id,
                 customer_id=alert.customer_id,
@@ -225,6 +239,8 @@ class TriageService:
                 decision=decision,
                 investigation_required=decision.action.value == "ESCALATE_FOR_INVESTIGATION",
                 status=alert.status,
+                sanctions_hits=sanctions_hits,
+                recency_penalty_applied=bool(risk_score.scoring_factors.get("recency_penalty_applied", False)),
                 initial_suspicion_note=suspicion_note if want_narrative else None,
                 initial_suspicion_source=suspicion_src if want_narrative else None,
             )
