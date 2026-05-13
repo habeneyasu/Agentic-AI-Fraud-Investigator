@@ -7,15 +7,44 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.config import settings
 from app.llm.client import call_fast_json, call_reasoning_json
 from app.llm.prompts import (
     get_investigation_synthesis_prompt,
+    get_triage_initial_suspicion_prompt,
     get_triage_prompt,
     get_hitl_recommendation_prompt,
 )
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _extract_triage_narrative_fields(result: dict[str, Any]) -> tuple[str, list[str]]:
+    """Normalize LLM JSON keys (snake_case / camelCase / common aliases)."""
+    if not result:
+        return "", []
+    note = (
+        result.get("initial_suspicion_note")
+        or result.get("initialSuspicionNote")
+        or result.get("suspicion_note")
+        or result.get("narrative")
+        or result.get("initial_suspicion")
+        or result.get("summary")
+        or ""
+    )
+    note = str(note).strip()
+    obs_raw = (
+        result.get("key_observations")
+        or result.get("keyObservations")
+        or result.get("observations")
+        or result.get("bullets")
+        or []
+    )
+    obs: list[str] = []
+    if isinstance(obs_raw, list):
+        obs = [str(x).strip() for x in obs_raw if str(x).strip()]
+    return note, obs[:8]
 
 
 async def synthesize_investigation(
@@ -39,6 +68,29 @@ async def synthesize_investigation(
         return _rule_based_fallback(transaction_result, kyc_result, sanctions_result)
 
     return result
+
+
+async def draft_triage_initial_suspicion(
+    alert_summary: dict[str, Any],
+    risk_assessment: dict[str, Any],
+    investigation_decision: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Phase-1 narrative: explain the deterministic triage outcome in human-readable prose.
+    Returns keys ``initial_suspicion_note`` (str, may be empty) and ``key_observations`` (list).
+    """
+    prompt = get_triage_initial_suspicion_prompt(alert_summary, risk_assessment, investigation_decision)
+    merged = await call_fast_json(prompt, max_tokens=448)
+    note, obs = _extract_triage_narrative_fields(merged)
+
+    has_provider = settings.llm_narrative_credentials_configured()
+    if not note and has_provider:
+        merged2 = await call_reasoning_json(prompt, max_tokens=768)
+        note2, obs2 = _extract_triage_narrative_fields(merged2)
+        if note2:
+            return {"initial_suspicion_note": note2, "key_observations": obs2 or obs}
+
+    return {"initial_suspicion_note": note, "key_observations": obs}
 
 
 async def triage_alert(

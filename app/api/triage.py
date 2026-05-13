@@ -1,44 +1,64 @@
-"""Enterprise-grade Triage API - Clean HTTP routing layer."""
+"""Triage HTTP routes."""
 
-from typing import Optional
+from typing import FrozenSet, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from app.api.deps import RequireApiKey
 from app.core.logging import get_logger
-from app.models.triage import TriageAssessmentRequest, TriageAssessmentResponse
+from app.models.triage import (
+    TriageAssessBody,
+    TriageAssessmentRequest,
+    TriageAssessmentResponse,
+)
 from app.services.triage_service import TriageService
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["triage"])
 triage_service = TriageService()
 
+_CUSTOMER_ID_PLACEHOLDERS: FrozenSet[str] = frozenset(
+    {
+        "string",
+        "str",
+        "customer_id",
+        "your_customer_id",
+        "example",
+        "null",
+        "none",
+        "n/a",
+        "na",
+        "-",
+    }
+)
+
+
+def _normalize_customer_id(value: Optional[str]) -> Optional[str]:
+    s = (value or "").strip()
+    if not s:
+        return None
+    if s.lower() in _CUSTOMER_ID_PLACEHOLDERS:
+        return None
+    return s
+
 
 @router.post("/triage/assess", response_model=TriageAssessmentResponse)
 async def assess_alerts(
-    customer_id: Optional[str] = None,
+    payload: Optional[TriageAssessBody] = Body(default=None),
+    customer_id: Optional[str] = Query(
+        default=None,
+        description="Optional customer filter — **only** supported source; use ``?customer_id=CUST003`` (not the JSON body).",
+    ),
     _: None = RequireApiKey,
 ):
-    """
-    Assess alerts and provide investigation decisions.
-
-    Reads alerts from the **in-memory** `AlertRepository` inside this API process only.
-    That store is **empty on startup** until you populate it (e.g. `POST /v1/alerts/generate?customer_id=CUST003`).
-    JSON shown in the Streamlit app or in files is **not** visible to this endpoint unless it was ingested through the API.
-
-    Args:
-        customer_id: Optional customer ID to assess alerts for specific customer.
-                   If not provided, assesses all alerts.
-
-    Usage:
-        - POST /v1/alerts/generate?customer_id=CUST003 — seed alerts from packaged transaction/KYC data
-        - POST /v1/triage/assess?customer_id=CUST003 — run triage on those alerts
-    """
+    """Triage + optional narrative. Customer scope: query ``customer_id`` only."""
     try:
-        # Create request object
-        request = TriageAssessmentRequest(customer_id=customer_id)
+        body = payload or TriageAssessBody()
+        request = TriageAssessmentRequest(
+            customer_id=_normalize_customer_id(customer_id),
+            include_initial_suspicion_note=body.include_initial_suspicion_note,
+        )
 
-        # Delegate to service layer - API only handles HTTP
         return await triage_service.assess(request)
 
     except Exception as e:

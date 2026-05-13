@@ -50,6 +50,19 @@ class AlertListResponse(BaseModel):
     filtered_count: int
 
 
+class AlertGenerateResponse(BaseModel):
+    """``POST /v1/alerts/generate``: full queue plus counts for this request."""
+    alerts: List[Alert]
+    total_count: int
+    filtered_count: int
+    created: int = Field(0, description="Alerts newly appended to the runtime JSON queue this request.")
+    postgres_inserted: int = Field(0, description="Rows inserted into the ``alerts`` Postgres table this request.")
+    skipped_duplicates: int = Field(
+        0,
+        description="Policy hits skipped because ``alert_hash`` was already in the queue or DB.",
+    )
+
+
 class AlertFilter(BaseModel):
     """Filter for alert queries."""
     status: Optional[str] = None
