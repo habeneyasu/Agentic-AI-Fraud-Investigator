@@ -58,6 +58,14 @@ class AssessedAlert(BaseModel):
         ...,
         description="Workflow state after triage: ``CLOSED`` (AUTO_CLOSE), ``MONITORING`` (MONITOR), ``OPEN_FOR_INVESTIGATION`` (ESCALATE_FOR_INVESTIGATION).",
     )
+    sanctions_hits: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Populated for SANCTIONED_COUNTRY policy: list of matched sanctions indicators with country code, tier, and critical flag.",
+    )
+    recency_penalty_applied: bool = Field(
+        default=False,
+        description="True when the transaction timestamp is older than 30 days and a recency penalty was applied to the raw score.",
+    )
     initial_suspicion_note: Optional[str] = Field(
         default=None,
         description="Phase-1 narrative: human-readable explanation of why deterministic triage fired.",
@@ -87,7 +95,7 @@ class TriageSummary(BaseModel):
     )
     assessment_scope: Literal["single_customer", "all_customers"] = Field(
         ...,
-        description="``single_customer`` when ``?customer_id=`` was provided; otherwise all customers in the merged queue.",
+        description="``single_customer`` when ``?customer_id=`` or ``?alert_id=`` scoped the run; otherwise all customers in the merged queue.",
     )
     policy_breakdown: Dict[str, int] = Field(..., description="Counts by coarse policy family.")
     severity_distribution: Dict[str, int] = Field(
@@ -97,18 +105,27 @@ class TriageSummary(BaseModel):
 
 
 class TriageAssessBody(BaseModel):
-    """JSON body for ``POST /v1/triage/assess``. Customer scope is **only** ``?customer_id=`` on the URL (not in this body)."""
+    """JSON body for ``POST /v1/triage/assess``.
+
+    Prefer ``?customer_id=`` on the URL; optional ``customer_id`` here is used when the query param is omitted
+    (same normalization as query — placeholders are ignored).
+    """
 
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
             "examples": [
+                {"include_initial_suspicion_note": True, "customer_id": "CUST003"},
                 {"include_initial_suspicion_note": True},
                 {},
             ]
         }
     )
 
+    customer_id: Optional[str] = Field(
+        default=None,
+        description="Optional customer filter when ``?customer_id=`` is not set on the URL.",
+    )
     include_initial_suspicion_note: Optional[bool] = Field(
         default=None,
         description="If set, overrides ``TRIAGE_NARRATIVE_ENABLED`` for this request only.",
@@ -120,7 +137,11 @@ class TriageAssessmentRequest(BaseModel):
 
     customer_id: Optional[str] = Field(
         default=None,
-        description="Customer filter from the **query** parameter ``customer_id`` only.",
+        description="Customer filter: query ``?customer_id=`` if set, else optional body ``customer_id`` from ``TriageAssessBody``.",
+    )
+    alert_id: Optional[str] = Field(
+        default=None,
+        description="Optional **query** ``alert_id`` — narrows triage to that alert (with ``customer_id`` if both are set).",
     )
     include_initial_suspicion_note: Optional[bool] = Field(
         default=None,
@@ -134,7 +155,7 @@ class TriageAssessmentResponse(BaseModel):
     success: bool = Field(..., description="False only on transport/application errors; empty batch still returns success with counts of zero.")
     total_alerts_assessed: int = Field(
         ...,
-        description="Count of alerts triaged in this run — same length as ``assessed_alerts``. With ``?customer_id=``, only that customer's alerts are in scope.",
+        description="Count of alerts triaged in this run — same length as ``assessed_alerts``. Use ``?customer_id=`` and/or ``?alert_id=`` to narrow scope.",
     )
     auto_closed_count: int = Field(..., description="Count of AUTO_CLOSE decisions in this run.")
     monitor_count: int = Field(

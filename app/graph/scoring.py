@@ -1,14 +1,12 @@
 """Hybrid rule + AI risk scoring."""
 
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 import json
 import re
 
 from app.core.logging import get_logger
 from app.core.config import get_settings
-from app.llm.client import LLMClient, LLMProvider
-from app.llm.prompts import get_fraud_analysis_prompt
 from app.shared.enums import ScoringMode, RiskCategory
 from app.shared.models import RiskFactor, ScoringResult
 
@@ -17,13 +15,12 @@ settings = get_settings()
 
 
 class HybridRiskScorer:
-    """Hybrid risk scoring system combining rules and AI context."""
-    
-    def __init__(self, mode: ScoringMode = ScoringMode.HYBRID, 
-                 llm_provider: LLMProvider = LLMProvider.CEREBRAS):
+    """Rule-first risk scoring; optional AI path when ``llm_provider`` is wired."""
+
+    def __init__(self, mode: ScoringMode = ScoringMode.RULES_ONLY, llm_provider: Any = None):
         self.mode = mode
         self.llm_provider = llm_provider
-        self.llm_client = LLMClient(llm_provider)
+        self.llm_client = None
         self.rules = self._load_rules()
         
     def _load_rules(self) -> Dict[str, Dict[str, Any]]:
@@ -124,6 +121,8 @@ class HybridRiskScorer:
     
     async def _ai_based_scoring(self, event: Dict[str, Any]) -> ScoringResult:
         """Calculate risk score using AI analysis."""
+        if self.llm_client is None:
+            return await self._rules_based_scoring(event)
         try:
             context = {
                 'customer_risk_profile': event.get('risk_profile', 'unknown'),
@@ -230,25 +229,23 @@ class HybridRiskScorer:
             return "MINIMAL"
 
 
-# Global instances
-hybrid_scorer = HybridRiskScorer()
+# Global instances — default RULES_ONLY avoids legacy LLMClient dependency in graph scoring.
+hybrid_scorer = HybridRiskScorer(mode=ScoringMode.RULES_ONLY)
 
 
-def get_scorer(mode: ScoringMode = ScoringMode.HYBRID, 
-               provider: LLMProvider = LLMProvider.CEREBRAS) -> HybridRiskScorer:
+def get_scorer(mode: ScoringMode = ScoringMode.RULES_ONLY) -> HybridRiskScorer:
     """Get scorer instance."""
-    return HybridRiskScorer(mode, provider)
+    return HybridRiskScorer(mode)
 
 
 async def calculate_risk_score(event: Dict[str, Any], 
-                           mode: ScoringMode = ScoringMode.HYBRID) -> ScoringResult:
+                           mode: ScoringMode = ScoringMode.RULES_ONLY) -> ScoringResult:
     """Calculate risk score using hybrid scorer."""
     return await hybrid_scorer.calculate_risk_score(event)
 
 
-def update_scoring_mode(mode: ScoringMode, 
-                     provider: LLMProvider = LLMProvider.CEREBRAS) -> None:
+def update_scoring_mode(mode: ScoringMode) -> None:
     """Update global scoring mode."""
     global hybrid_scorer
-    hybrid_scorer = HybridRiskScorer(mode, provider)
-    logger.info(f"Updated scoring mode to: {mode.value} with provider: {provider.value}")
+    hybrid_scorer = HybridRiskScorer(mode)
+    logger.info(f"Updated scoring mode to: {mode.value}")

@@ -1,5 +1,5 @@
 """
-Triage Service - Enterprise-grade orchestration layer.
+Triage orchestration: alerts → risk → decision → optional narrative.
 """
 
 from __future__ import annotations
@@ -84,8 +84,6 @@ def _alert_summary_for_narrative(alert: Alert) -> Dict[str, Any]:
 
 
 class TriageService:
-    """Enterprise-grade triage service orchestrating assessment workflow."""
-
     def __init__(self):
         self.repository = AlertRepository()
         self.risk_scorer = RiskScoringEngine()
@@ -144,7 +142,8 @@ class TriageService:
     async def assess(self, request: TriageAssessmentRequest) -> TriageAssessmentResponse:
         """Load merged alerts, deterministic score + decision, optional Phase-1 LLM narrative, persist."""
         scope_customer = (request.customer_id or "").strip() or None
-        alert_filter = AlertFilter(customer_id=scope_customer)
+        scope_alert_id = (request.alert_id or "").strip() or None
+        alert_filter = AlertFilter(customer_id=scope_customer, alert_id=scope_alert_id)
         alerts_response = await self.repository.get_alerts(alert_filter)
         alerts = list(alerts_response.alerts)
 
@@ -158,16 +157,35 @@ class TriageService:
                     requested_customer=scope_customer,
                     dropped=before - len(alerts),
                 )
+        if scope_alert_id:
+            before = len(alerts)
+            alerts = [a for a in alerts if a.alert_id == scope_alert_id]
+            if before != len(alerts):
+                logger.warning(
+                    "triage_alert_id_mismatch_filtered",
+                    requested_alert_id=scope_alert_id,
+                    dropped=before - len(alerts),
+                )
+
+        summary_customer_id = scope_customer or (alerts[0].customer_id if alerts else None)
+        narrow_scope = bool(scope_customer or scope_alert_id)
+
         logger.info(
             "triage_alerts_in_scope",
             customer_id=scope_customer,
+            alert_id=scope_alert_id,
             count=len(alerts),
         )
 
         want_narrative = self._narrative_requested(request)
 
         if not alerts:
-            return self._build_empty_response(scope_customer, want_narrative)
+            return self._build_empty_response(
+                summary_customer_id if narrow_scope else None,
+                want_narrative,
+                alert_id=scope_alert_id,
+                narrow_scope=narrow_scope,
+            )
 
         # Process each alert through the pipeline
         assessed_alerts = []
@@ -199,6 +217,20 @@ class TriageService:
 
             alert.metadata.update(md_update)
 
+            # Build sanctions_hits array for SANCTIONED_COUNTRY policy
+            sanctions_hits: List[Dict[str, Any]] = []
+            if alert.metadata.get("policy") == AlertPolicy.SANCTIONED_COUNTRY.value:
+                sf = risk_score.scoring_factors
+                country = sf.get("sanctioned_country") or alert.metadata.get("sanctioned_country", "")
+                if country:
+                    sanctions_hits = [{
+                        "country_code": country,
+                        "country_tier": sf.get("country_tier", "unknown"),
+                        "critical_sanctions": sf.get("critical_sanctions", False),
+                        "risk_score": risk_score.score,
+                        "policy": AlertPolicy.SANCTIONED_COUNTRY.value,
+                    }]
+
             assessed_alert = AssessedAlert(
                 alert_id=alert.alert_id,
                 customer_id=alert.customer_id,
@@ -207,6 +239,8 @@ class TriageService:
                 decision=decision,
                 investigation_required=decision.action.value == "ESCALATE_FOR_INVESTIGATION",
                 status=alert.status,
+                sanctions_hits=sanctions_hits,
+                recency_penalty_applied=bool(risk_score.scoring_factors.get("recency_penalty_applied", False)),
                 initial_suspicion_note=suspicion_note if want_narrative else None,
                 initial_suspicion_source=suspicion_src if want_narrative else None,
             )
@@ -234,18 +268,34 @@ class TriageService:
                 assessment_row,
             )
 
-        return self._build_response(assessed_alerts, investigation_decisions, scope_customer, want_narrative)
+        return self._build_response(
+            assessed_alerts,
+            investigation_decisions,
+            summary_customer_id,
+            want_narrative,
+            narrow_scope=narrow_scope,
+        )
 
     def _build_empty_response(
-        self, customer_id: Optional[str], want_narrative: bool
+        self,
+        customer_id: Optional[str],
+        want_narrative: bool,
+        *,
+        alert_id: Optional[str] = None,
+        narrow_scope: bool = False,
     ) -> TriageAssessmentResponse:
         """Build response for no alerts found."""
-        scope = "single_customer" if customer_id else "all_customers"
+        scope = "single_customer" if narrow_scope else "all_customers"
         if customer_id:
             hint = (
                 f"No alerts in the merged store matched customer `{customer_id}`. "
                 "Confirm that customer exists in ``kyc_profiles``, run ``POST /v1/alerts/generate?customer_id=...``, "
                 "or omit the query parameter to triage the full queue."
+            )
+        elif alert_id:
+            hint = (
+                f"No alert with id `{alert_id}` was found in the merged store. "
+                "Generate alerts first, or verify the id matches Postgres / runtime JSON."
             )
         else:
             hint = (
@@ -287,6 +337,8 @@ class TriageService:
         investigation_decisions: List[str],
         customer_id: Optional[str],
         want_narrative: bool,
+        *,
+        narrow_scope: bool = False,
     ) -> TriageAssessmentResponse:
         """Build comprehensive triage assessment response."""
         all_assessed = assessed_alerts
@@ -304,7 +356,8 @@ class TriageService:
         policy_breakdown = self._build_policy_breakdown(all_assessed)
         severity_distribution = self._build_severity_distribution(all_assessed)
 
-        scope = "single_customer" if customer_id else "all_customers"
+        summary_customer = customer_id or (all_assessed[0].customer_id if all_assessed else None)
+        scope = "single_customer" if narrow_scope else "all_customers"
         engine = _narrative_engine_status(want_narrative, all_assessed, empty_batch=False)
         return TriageAssessmentResponse(
             success=True,
@@ -326,7 +379,7 @@ class TriageService:
                 auto_close_rate=round(auto_close_rate, 2),
                 escalation_rate=round(escalation_rate, 2),
                 average_risk_score=round(average_risk, 3),
-                customer_id=customer_id,
+                customer_id=summary_customer,
                 assessment_scope=scope,
                 policy_breakdown=policy_breakdown,
                 severity_distribution=severity_distribution
