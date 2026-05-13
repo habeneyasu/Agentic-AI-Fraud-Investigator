@@ -1,7 +1,7 @@
 """
 Presenter console for the Agentic AI Fraud Investigator reference stack.
 
-Each segment issues real FastAPI calls. Set ``FRAUD_API_BASE`` and ``API_KEY`` to match your deployment.
+Each segment issues real FastAPI calls. Set ``FRAUD_API_BASE`` to your API. Optionally set ``API_KEY`` if the server enforces ``X-API-Key``.
 """
 
 from __future__ import annotations
@@ -23,22 +23,22 @@ import streamlit as st
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 API_BASE = os.getenv("FRAUD_API_BASE", "http://127.0.0.1:8000")
-API_KEY  = os.getenv("API_KEY", "dev-secret-api-key")
 DATA_DIR = Path(__file__).parent.parent / "app" / "data"
 
-HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
+
+def _api_headers() -> dict[str, str]:
+    h: dict[str, str] = {"Content-Type": "application/json"}
+    key = (os.getenv("API_KEY") or "").strip()
+    if key:
+        h["X-API-Key"] = key
+    return h
 
 STAGE_LABELS = [
-    "Evidence & context",
-    "Alert intake",
-    "Operations queue",
-    "Triage & routing",
-    "Specialist agents",
-    "Risk synthesis",
-    "Analyst review (HITL)",
-    "Remediation",
-    "Audit & lineage",
-    "Executive view",
+    "Ingestion",
+    "Triage",
+    "Investigation",
+    "Evaluation",
+    "Resolution",
 ]
 
 DEMO_KICKER = "Reference walkthrough"
@@ -220,13 +220,13 @@ code, pre, .monospace { font-family: 'SF Mono', 'Monaco', monospace !important; 
 .demo-gate-title { font-weight: 700; color: #fcd34d; font-size: 0.82rem; margin-bottom: 0.25rem; }
 .demo-gate-body { color: #cbd5e1; font-size: 0.82rem; line-height: 1.45; }
 
-html, body, [data-testid="stAppViewContainer"] { 
-    background: var(--bg-primary) !important; 
-    color: var(--text-primary); 
+html, body, [data-testid="stAppViewContainer"] {
+    background: var(--bg-primary) !important;
+    color: var(--text-primary);
 }
-[data-testid="stHeader"] { 
-    background: var(--bg-secondary) !important; 
-    border-bottom: 1px solid var(--border); 
+[data-testid="stHeader"] {
+    background: var(--bg-secondary) !important;
+    border-bottom: 1px solid var(--border);
     backdrop-filter: blur(10px);
     position: relative !important;
 }
@@ -261,13 +261,13 @@ html, body, [data-testid="stAppViewContainer"] {
     }
 }
 
-.block-container { 
-    max-width: 1400px; 
-    padding: 1rem 1.5rem 2rem !important; 
+.block-container {
+    max-width: 1400px;
+    padding: 1rem 1.5rem 2rem !important;
 }
-[data-testid="stSidebarContent"] { 
-    background: var(--bg-secondary) !important; 
-    border-right: 1px solid var(--border); 
+[data-testid="stSidebarContent"] {
+    background: var(--bg-secondary) !important;
+    border-right: 1px solid var(--border);
     backdrop-filter: blur(15px);
 }
 
@@ -477,24 +477,24 @@ html, body, [data-testid="stAppViewContainer"] {
 
 /* Pulse Animations */
 @keyframes pulse-active {
-    0%, 100% { 
-        transform: scale(1); 
-        box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.7); 
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.7);
     }
-    50% { 
-        transform: scale(1.05); 
-        box-shadow: 0 0 0 10px rgba(255, 209, 102, 0); 
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(255, 209, 102, 0);
     }
 }
 
 @keyframes fade-in {
-    from { 
-        opacity: 0; 
-        transform: translateY(20px); 
+    from {
+        opacity: 0;
+        transform: translateY(20px);
     }
-    to { 
-        opacity: 1; 
-        transform: translateY(0); 
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
@@ -893,7 +893,7 @@ button[kind="secondary"] { background:#0f1f35 !important; border:1px solid #1e3a
 def api_post(path: str, payload: dict) -> dict:
     """Synchronous POST to the backend API."""
     try:
-        r = httpx.post(f"{API_BASE}{path}", json=payload, headers=HEADERS, timeout=60)
+        r = httpx.post(f"{API_BASE}{path}", json=payload, headers=_api_headers(), timeout=60)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as e:
@@ -905,7 +905,7 @@ def api_post(path: str, payload: dict) -> dict:
 def api_get(path: str, params: dict | None = None) -> dict:
     """Synchronous GET to the backend API."""
     try:
-        r = httpx.get(f"{API_BASE}{path}", params=params, headers=HEADERS, timeout=30)
+        r = httpx.get(f"{API_BASE}{path}", params=params, headers=_api_headers(), timeout=30)
         r.raise_for_status()
         return r.json()
     except Exception as e:
@@ -1212,13 +1212,12 @@ def render_sidebar() -> None:
             if st.sidebar.button(
                 f"{icon}  {short}",
                 key=f"nav_{i}",
-                use_container_width=True,
             ):
                 st.session_state.stage = i
                 st.rerun()
 
     st.sidebar.markdown("<hr style='border-color:#1a2d45;margin:0.75rem 0;'>", unsafe_allow_html=True)
-    if st.sidebar.button("↺  Reset Demo", use_container_width=True):
+    if st.sidebar.button("↺  Reset Demo"):
         for k in list(st.session_state.keys()):
             del st.session_state[k]
         st.rerun()
@@ -1317,7 +1316,7 @@ def stage_data_sources() -> None:
             min_amount = st.number_input("Min $", value=0.0, key="min_amount")
         with col3:
             max_amount = st.number_input("Max $", value=100000.0, key="max_amount")
-        
+
         # Filter transactions
         filtered_txns = []
         for t in txns:
@@ -1330,7 +1329,7 @@ def stage_data_sources() -> None:
             if max_amount and t.get("amount", 0) > max_amount:
                 continue
             filtered_txns.append(t)
-        
+
         st.markdown(
             f'<div style="margin-bottom: 0.75rem; color: #94a3b8; font-size: 0.88rem;">'
             f"Showing <b>{min(10, len(filtered_txns))}</b> of <b>{len(filtered_txns)}</b> transactions</div>",
@@ -1361,7 +1360,7 @@ def stage_data_sources() -> None:
                     st.caption("Risk indicators")
                     st.text(inds_txt)
                 st.divider()
-        
+
         if len(filtered_txns) > 10:
             st.info(f"Showing first 10 of {len(filtered_txns)} transactions. Use search to find more.")
 
@@ -1389,15 +1388,15 @@ def stage_data_sources() -> None:
                 # Create heatmap data
                 import plotly.express as px
                 df_countries = pd.DataFrame(countries)
-                
+
                 # Create color scale based on risk scores
                 df_countries['risk_color'] = df_countries['risk_score'].apply(
                     lambda x: '#EF476F' if x > 0.8 else '#FFD166' if x > 0.6 else '#06D6A0'
                 )
-                
+
                 # Create heatmap
                 fig = px.choropleth(
-                    df_countries, 
+                    df_countries,
                     locations="country_code",
                     color="risk_score",
                     hover_name="country_name",
@@ -1406,7 +1405,7 @@ def stage_data_sources() -> None:
                     range_color=(0, 1),
                     title="Global Risk Heatmap"
                 )
-                
+
                 fig.update_layout(
                     geo=dict(showframe=False, showcoastlines=False),
                     paper_bgcolor='rgba(10, 37, 64, 0.9)',
@@ -1415,7 +1414,7 @@ def stage_data_sources() -> None:
                     margin=dict(l=0, r=0, t=0, b=0, pad=0),
                     height=400
                 )
-                
+
                 # Country risk analysis available in audit trail
                 st.markdown('<div style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted);">Country risk analysis available in audit trail</div>', unsafe_allow_html=True)
 
@@ -1578,7 +1577,7 @@ def stage_alerts_queue() -> None:
         filter_severity = st.selectbox("Filter:", ["All", "CRITICAL", "HIGH", "MEDIUM"], key="filter_severity")
     with col3:
         st.markdown(f'<div style="text-align: right; color: #64748b; font-size: 0.9rem;">{len(alerts)} alerts</div>', unsafe_allow_html=True)
-    
+
     # Sort alerts
     if sort_by == "Amount (High→Low)":
         alerts_sorted = sorted(alerts, key=lambda x: x.get("amount", 0), reverse=True)
@@ -1589,17 +1588,17 @@ def stage_alerts_queue() -> None:
         alerts_sorted = sorted(alerts, key=lambda x: severity_order.get(x.get("severity", "MEDIUM"), 3))
     else:  # Created Time
         alerts_sorted = sorted(alerts, key=lambda x: x.get("created_at", ""), reverse=True)
-    
+
     # Filter alerts
     if filter_severity != "All":
         alerts_sorted = [a for a in alerts_sorted if a.get("severity") == filter_severity]
-    
+
     for a in alerts_sorted:
         is_sel = st.session_state.selected_alert_id == a["alert_id"]
         severity = a.get("severity", "MEDIUM")
         priority_class = "priority-critical" if severity == "CRITICAL" else "priority-high" if severity == "HIGH" else "priority-low"
         card_cls = f'alert-card {severity.lower()}' + (" selected" if is_sel else "")
-        
+
         st.markdown(f'''
         <div class="{card_cls} agent-card-animated" style="margin-bottom: 1rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
@@ -1635,7 +1634,7 @@ def stage_alerts_queue() -> None:
             </div>
         </div>
         ''', unsafe_allow_html=True)
-        
+
         if st.button("Open investigation workspace →", key=f"inv_{a['alert_id']}", use_container_width=True):
             st.session_state.selected_alert_id = a["alert_id"]
             st.session_state.stage = 4
@@ -1853,7 +1852,7 @@ def stage_agents(alert: dict) -> None:
                     if attempt > 0:
                         st.info(f"🔄 Service Re-connecting... (Attempt {attempt + 1}/{max_retries})")
                         time.sleep(1)
-                    
+
                     payload = {
                         "transaction_id":    alert["transaction_id"],
                         "customer_id":       alert["customer_id"],
@@ -2361,6 +2360,151 @@ def stage_audit(alert: dict | None) -> None:
             unsafe_allow_html=True,
         )
 
+
+# ─────────────────────────────────────────────────────────────────────
+# STAGE 6 — EVALUATION
+# ─────────────────────────────────────────────────────────────────────────────
+def stage_evaluation(alert: dict) -> None:
+    stage_hero(
+        6,
+        "Agent Results vs. Benchmark Comparison",
+        "Evaluates agent performance against historical benchmarks and industry standards to ensure accuracy and reliability.",
+        badge_label="Benchmark engine",
+        badge_ok=True,
+        learning="Quality assurance through continuous evaluation drives model improvement and maintains detection standards.",
+    )
+
+    eval_result = alert.get("evaluation_result", {})
+
+    if eval_result:
+        st.markdown('<span class="section-label">Evaluation Summary</span>', unsafe_allow_html=True)
+
+        # Evaluation status and score
+        eval_status = eval_result.get("status", "MEETS_BENCHMARK")
+        eval_score = eval_result.get("evaluation_score", 0.0)
+
+        status_color = {
+            "EXCEEDS_BENCHMARK": "#10b981",
+            "MEETS_BENCHMARK": "#059669",
+            "BELOW_BENCHMARK": "#f59e0b",
+            "CRITICAL_DEVIATION": "#ef4444"
+        }.get(eval_status, "#64748b")
+
+        st.markdown(
+            f'<div class="summary-card">'
+            f'<div class="summary-row"><span class="sk">Evaluation Status</span><span class="sv" style="color:{status_color};">{eval_status.replace("_", " ")}</span></div>'
+            f'<div class="summary-row"><span class="sk">Evaluation Score</span><span class="sv">{eval_score:.2f}/1.00</span></div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+
+        # Agent performance metrics
+        metrics = eval_result.get("metrics", {})
+        if metrics:
+            st.markdown('<span class="section-label">Agent Performance Metrics</span>', unsafe_allow_html=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(
+                    f'<div class="summary-card">'
+                    f'<div class="summary-row"><span class="sk">Risk Score</span><span class="sv">{metrics.get("risk_score", "N/A")}</span></div>'
+                    f'<div class="summary-row"><span class="sk">Confidence</span><span class="sv">{metrics.get("confidence", "N/A")}</span></div>'
+                    f'<div class="summary-row"><span class="sk">Processing Time</span><span class="sv">{metrics.get("processing_time", "N/A")}s</span></div>'
+                    f'</div>', unsafe_allow_html=True,
+                )
+
+            with col2:
+                st.markdown(
+                    f'<div class="summary-card">'
+                    f'<div class="summary-row"><span class="sk">Risk Within Range</span><span class="sv">{"✓" if metrics.get("risk_within_range") else "✗"}</span></div>'
+                    f'<div class="summary-row"><span class="sk">Meets Confidence</span><span class="sv">{"✓" if metrics.get("meets_confidence_threshold") else "✗"}</span></div>'
+                    f'<div class="summary-row"><span class="sk">Processing Acceptable</span><span class="sv">{"✓" if metrics.get("processing_acceptable") else "✗"}</span></div>'
+                    f'</div>', unsafe_allow_html=True,
+                )
+
+        # Benchmark comparison
+        benchmark_data = eval_result.get("benchmark_data", {})
+        if benchmark_data:
+            st.markdown('<span class="section-label">Benchmark Comparison</span>', unsafe_allow_html=True)
+
+            st.markdown(
+                f'<div class="summary-card">'
+                f'<div class="summary-row"><span class="sk">Historical Accuracy</span><span class="sv">{benchmark_data.get("historical_accuracy", "N/A"):.1%}</span></div>'
+                f'<div class="summary-row"><span class="sk">False Positive Rate</span><span class="sv">{benchmark_data.get("false_positive_rate", "N/A"):.1%}</span></div>'
+                f'<div class="summary-row"><span class="sk">Detection Rate</span><span class="sv">{benchmark_data.get("detection_rate", "N/A"):.1%}</span></div>'
+                f'<div class="summary-row"><span class="sk">Typical Risk Range</span><span class="sv">{benchmark_data.get("typical_risk_range", "N/A")}</span></div>'
+                f'</div>', unsafe_allow_html=True,
+            )
+
+        # Recommendations
+        recommendations = eval_result.get("recommendations", [])
+        if recommendations:
+            st.markdown('<span class="section-label">Recommendations</span>', unsafe_allow_html=True)
+            for rec in recommendations:
+                st.markdown(
+                    f'<div class="evidence-card">'
+                    f'<div class="evidence-reason">{rec}</div>'
+                    f'</div>', unsafe_allow_html=True,
+                )
+
+    else:
+        st.markdown('<div class="info-panel">No evaluation results available. Run agent evaluation first.</div>', unsafe_allow_html=True)
+
+    # Evaluation controls
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<span class="section-label">Evaluation Controls</span>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Re-evaluate Agent", type="secondary", use_container_width=True):
+            # Trigger re-evaluation
+            try:
+                response = httpx.post(
+                    f"{API_BASE}/v1/evaluation/agent-result",
+                    headers=_api_headers(),
+                    json={
+                        "investigation_id": alert.get("investigation_id", ""),
+                        "agent_type": "transaction",  # Default to transaction agent
+                        "agent_result": alert.get("agent_results", {}).get("transaction", {}),
+                        "fraud_type": "transaction_anomaly"
+                    }
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    alert["evaluation_result"] = result
+                    st.success("Agent re-evaluated successfully!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Evaluation failed: {str(e)}")
+
+    with col2:
+        if st.button("📊 View Benchmarks", type="secondary", use_container_width=True):
+            # Show benchmark data
+            try:
+                response = httpx.get(
+                    f"{API_BASE}/v1/evaluation/benchmarks",
+                    headers=_api_headers()
+                )
+                if response.status_code == 200:
+                    benchmarks = response.json().get("data", {})
+                    if benchmarks:
+                        st.markdown('<span class="section-label">Available Benchmarks</span>', unsafe_allow_html=True)
+
+                        # Fraud type benchmarks
+                        fraud_benchmarks = benchmarks.get("fraud_type_benchmarks", {})
+                        if fraud_benchmarks:
+                            st.markdown("#### Fraud Type Benchmarks", unsafe_allow_html=True)
+                            for fraud_type, benchmark in fraud_benchmarks.items():
+                                st.markdown(f"**{fraud_type}**: Accuracy `{benchmark['historical_accuracy']:.1%}`, Risk Range `{benchmark['typical_risk_range']}`")
+
+                        # Agent benchmarks
+                        agent_benchmarks = benchmarks.get("agent_benchmarks", {})
+                        if agent_benchmarks:
+                            st.markdown("#### Agent Performance Benchmarks", unsafe_allow_html=True)
+                            for agent_type, benchmark in agent_benchmarks.items():
+                                st.markdown(f"**{agent_type}**: Expected Accuracy `{benchmark['expected_accuracy']:.1%}`, Processing Time `< {benchmark['processing_time_threshold']}s`")
+            except Exception as e:
+                st.error(f"Failed to fetch benchmarks: {str(e)}")
+
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<span class="section-label">Raw Trace</span>', unsafe_allow_html=True)
     st.code("\n".join(f'[{e["timestamp"]}] {e["event"]}' for e in trail[-100:]), language="text")
@@ -2395,7 +2539,7 @@ def stage_live_dashboard() -> None:
 
     # Calculate fraud stopped count
     fraud_stopped = m["confirmed_fraud"] + m["blocked"]
-    
+
     st.markdown(
         f'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:.75rem;margin-bottom:1.5rem;">'
         f'<div class="stat-card"><div class="stat-value" style="color:#f1f5f9;">{m["total_alerts"]}</div><div class="stat-label">Total Alerts</div></div>'
@@ -2517,30 +2661,34 @@ def main() -> None:
         elif stage == 3:
             stage_alerts_queue()
         elif stage == 4:
-            if not alert:
-                _gate("Select an alert from <b>Segment 03 — Operations queue</b> before triage.")
-            else:
-                stage_triage(alert)
-        elif stage == 5:
+            if stage == 1:
+                stage_data_sources()
+        elif stage == 2:
+            stage_generate_alert()
+        elif stage == 3:
+            stage_alerts_queue()
+        elif stage == 4:
             if not alert or not alert.get("triage_result"):
                 _gate("Run triage in <b>Segment 04</b> so agents receive a routed case.")
             else:
-                stage_agents(alert)
-        elif stage == 6:
+                stage_triage(alert)
+        elif stage == 5:
             if not alert or not alert.get("agent_results"):
                 _gate("Execute the parallel agents in <b>Segment 05</b> to populate evidence.")
             else:
-                stage_risk_scoring(alert)
-        elif stage == 7:
-            if not alert or not alert.get("risk_result"):
-                _gate("Complete hybrid scoring in <b>Segment 06</b> before analyst review.")
+                stage_agents(alert)
+        elif stage == 6:
+            if not alert or not alert.get("evaluation_result"):
+                _gate("Complete evaluation in <b>Segment 06</b> before analyst review.")
             else:
-                stage_hitl(alert)
-        elif stage == 8:
+                stage_evaluation(alert)
+        elif stage == 7:
             if not alert:
                 _gate("Record an analyst disposition in <b>Segment 07</b> before remediation.")
             else:
-                stage_resolution(alert)
+                stage_hitl(alert)
+        elif stage == 8:
+            stage_resolution(alert)
         elif stage == 9:
             stage_audit(alert)
         elif stage == 10:
@@ -2551,11 +2699,11 @@ def main() -> None:
     with tab_audit_raw:
         st.markdown('<span class="section-label">Append-only trace (export friendly)</span>', unsafe_allow_html=True)
         st.code("\n".join(f'[{e["timestamp"]}] {e["event"]}' for e in st.session_state.audit_trail[-150:]), language="text")
-    
+
     st.markdown(
         '<div class="footer-branding" style="margin-top:2rem;padding-top:1rem;border-top:1px solid #1a2d45;">'
         '<div style="font-weight:700;color:#cbd5e1;margin-bottom:.35rem;">Reference implementation · not production advice</div>'
-        '<div style="font-size:0.78rem;color:#64748b;">Configure <code>FRAUD_API_BASE</code> and <code>API_KEY</code> to point at your FastAPI instance.</div>'
+        '<div style="font-size:0.78rem;color:#64748b;">Configure <code>FRAUD_API_BASE</code> for your FastAPI instance. Set <code>API_KEY</code> only if the API requires <code>X-API-Key</code>.</div>'
         "</div>",
         unsafe_allow_html=True,
     )

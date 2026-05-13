@@ -1,0 +1,468 @@
+[
+  {
+    "alert_id": "TX_HIGH_VALUE_TXN10001_20260512_162210",
+    "investigation_id": "inv_TXN10001_20260512_162210",
+    "transaction_id": "TXN10001",
+    "customer_id": "CUST003",
+    "amount": 15000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "IR",
+    "alert_hash": "hash_15000.0",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN_FOR_INVESTIGATION",
+    "severity": "high",
+    "metadata": {
+      "reason": "High-value transaction amount exceeds customer's normal transaction pattern",
+      "policy": "high_value_transaction_amount",
+      "amount": 15000.0,
+      "threshold": 10000,
+      "transaction_type": "transfer",
+      "description": "Online transfer - high_value_rush",
+      "triage_assessment": {
+        "score": 0.5,
+        "severity": "MEDIUM",
+        "auto_close_eligible": true,
+        "assessment_timestamp": "2026-05-12T16:23:53.427891",
+        "scoring_factors": {
+          "transaction_amount": 15000.0,
+          "amount_tier": "medium",
+          "threshold_used": 15000
+        }
+      },
+      "investigation_decision": {
+        "action": "MONITOR",
+        "reasoning": "Medium risk score (0.500) - monitoring recommended",
+        "confidence": 0.75,
+        "decision_timestamp": "2026-05-12T16:23:53.427920"
+      }
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "TX_HIGH_VALUE_TXN10004_20260512_162210",
+    "investigation_id": "inv_TXN10004_20260512_162210",
+    "transaction_id": "TXN10004",
+    "customer_id": "CUST003",
+    "amount": 45000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "KP",
+    "alert_hash": "hash_45000.0",
+    "timestamp": "2025-01-07T09:15:00Z",
+    "status": "OPEN_FOR_INVESTIGATION",
+    "severity": "high",
+    "metadata": {
+      "reason": "High-value transaction amount exceeds customer's normal transaction pattern",
+      "policy": "high_value_transaction_amount",
+      "amount": 45000.0,
+      "threshold": 10000,
+      "transaction_type": "transfer",
+      "description": "Wire transfer - unusual_destination",
+      "triage_assessment": {
+        "score": 0.7,
+        "severity": "HIGH",
+        "auto_close_eligible": false,
+        "assessment_timestamp": "2026-05-12T16:23:53.429778",
+        "scoring_factors": {
+          "transaction_amount": 45000.0,
+          "amount_tier": "high",
+          "threshold_used": 15000
+        }
+      },
+      "investigation_decision": {
+        "action": "ESCALATE_FOR_INVESTIGATION",
+        "reasoning": "High risk score (0.700) - investigation required",
+        "confidence": 0.85,
+        "decision_timestamp": "2026-05-12T16:23:53.429806"
+      }
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "KYC_NEW_DEVICE_CUST003_20260512_162210",
+    "investigation_id": "inv_CUST003_20260512_162210",
+    "transaction_id": "",
+    "customer_id": "CUST003",
+    "amount": 0.0,
+    "currency": "USD",
+    "account_id": "CUST003",
+    "recipient_country": "",
+    "alert_hash": "hash_Windows 10_Chrome_185.220.101.182",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN_FOR_INVESTIGATION",
+    "severity": "medium",
+    "metadata": {
+      "reason": "New or unrecognized device login - transaction initiated from a device not previously associated with the customer",
+      "policy": "new_device_login",
+      "event_type": "login_attempt",
+      "ip_address": "185.220.101.182",
+      "device_info": {
+        "device_type": "desktop",
+        "os": "Windows 10",
+        "browser": "Chrome"
+      },
+      "geo_location": {
+        "country": "RU",
+        "city": "Moscow",
+        "latitude": 55.7558,
+        "longitude": 37.6176
+      },
+      "anomaly_type": "geo_location_mismatch",
+      "triage_assessment": {
+        "score": 0.8,
+        "severity": "CRITICAL",
+        "auto_close_eligible": false,
+        "assessment_timestamp": "2026-05-12T16:23:53.430599",
+        "scoring_factors": {
+          "anomaly_type": "geo_location_mismatch",
+          "anomaly_tier": "geo_mismatch",
+          "geo_mismatch": true
+        }
+      },
+      "investigation_decision": {
+        "action": "ESCALATE_FOR_INVESTIGATION",
+        "reasoning": "Critical risk score (0.800) - immediate investigation required",
+        "confidence": 0.95,
+        "decision_timestamp": "2026-05-12T16:23:53.430620"
+      }
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "SANCTION_COUNTRY_TXN10001_20260512_162210",
+    "investigation_id": "inv_TXN10001_20260512_162210",
+    "transaction_id": "TXN10001",
+    "customer_id": "CUST003",
+    "amount": 15000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "IR",
+    "alert_hash": "hash_IR",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN_FOR_INVESTIGATION",
+    "severity": "high",
+    "metadata": {
+      "reason": "Transfer to sanctioned country - recipient country appears on the sanctions monitoring list",
+      "policy": "transfer_to_sanctioned_country",
+      "sanctioned_country": "IR",
+      "destination_account": "ACC_EXT12345",
+      "transaction_type": "transfer",
+      "description": "Online transfer - high_value_rush",
+      "ip_address": "185.220.101.182",
+      "triage_assessment": {
+        "score": 0.95,
+        "severity": "CRITICAL",
+        "auto_close_eligible": false,
+        "assessment_timestamp": "2026-05-12T16:23:53.431388",
+        "scoring_factors": {
+          "sanctioned_country": "IR",
+          "country_tier": "critical",
+          "critical_sanctions": true
+        }
+      },
+      "investigation_decision": {
+        "action": "ESCALATE_FOR_INVESTIGATION",
+        "reasoning": "Critical risk score (0.950) - immediate investigation required",
+        "confidence": 0.95,
+        "decision_timestamp": "2026-05-12T16:23:53.431411"
+      }
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "SANCTION_COUNTRY_TXN10004_20260512_162210",
+    "investigation_id": "inv_TXN10004_20260512_162210",
+    "transaction_id": "TXN10004",
+    "customer_id": "CUST003",
+    "amount": 45000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "KP",
+    "alert_hash": "hash_KP",
+    "timestamp": "2025-01-07T09:15:00Z",
+    "status": "OPEN_FOR_INVESTIGATION",
+    "severity": "high",
+    "metadata": {
+      "reason": "Transfer to sanctioned country - recipient country appears on the sanctions monitoring list",
+      "policy": "transfer_to_sanctioned_country",
+      "sanctioned_country": "KP",
+      "destination_account": "ACC_EXT22222",
+      "transaction_type": "transfer",
+      "description": "Wire transfer - unusual_destination",
+      "ip_address": "10.0.0.1",
+      "triage_assessment": {
+        "score": 0.95,
+        "severity": "CRITICAL",
+        "auto_close_eligible": false,
+        "assessment_timestamp": "2026-05-12T16:23:53.432179",
+        "scoring_factors": {
+          "sanctioned_country": "KP",
+          "country_tier": "critical",
+          "critical_sanctions": true
+        }
+      },
+      "investigation_decision": {
+        "action": "ESCALATE_FOR_INVESTIGATION",
+        "reasoning": "Critical risk score (0.950) - immediate investigation required",
+        "confidence": 0.95,
+        "decision_timestamp": "2026-05-12T16:23:53.432197"
+      }
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "TX_HIGH_VALUE_TXN10001_20260513_024616",
+    "investigation_id": "inv_TXN10001_20260513_024616",
+    "transaction_id": "TXN10001",
+    "customer_id": "CUST003",
+    "amount": 15000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "IR",
+    "alert_hash": "hash_15000.0",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN",
+    "severity": "high",
+    "metadata": {
+      "reason": "High-value transaction amount exceeds customer's normal transaction pattern",
+      "policy": "high_value_transaction_amount",
+      "amount": 15000.0,
+      "threshold": 10000,
+      "transaction_type": "transfer",
+      "description": "Online transfer - high_value_rush"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "TX_HIGH_VALUE_TXN10004_20260513_024616",
+    "investigation_id": "inv_TXN10004_20260513_024616",
+    "transaction_id": "TXN10004",
+    "customer_id": "CUST003",
+    "amount": 45000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "KP",
+    "alert_hash": "hash_45000.0",
+    "timestamp": "2025-01-07T09:15:00Z",
+    "status": "OPEN",
+    "severity": "high",
+    "metadata": {
+      "reason": "High-value transaction amount exceeds customer's normal transaction pattern",
+      "policy": "high_value_transaction_amount",
+      "amount": 45000.0,
+      "threshold": 10000,
+      "transaction_type": "transfer",
+      "description": "Wire transfer - unusual_destination"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "KYC_NEW_DEVICE_CUST003_20260513_024616",
+    "investigation_id": "inv_CUST003_20260513_024616",
+    "transaction_id": "",
+    "customer_id": "CUST003",
+    "amount": 0.0,
+    "currency": "USD",
+    "account_id": "CUST003",
+    "recipient_country": "",
+    "alert_hash": "hash_Windows 10_Chrome_185.220.101.182",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN",
+    "severity": "medium",
+    "metadata": {
+      "reason": "New or unrecognized device login - transaction initiated from a device not previously associated with the customer",
+      "policy": "new_device_login",
+      "event_type": "login_attempt",
+      "ip_address": "185.220.101.182",
+      "device_info": {
+        "device_type": "desktop",
+        "os": "Windows 10",
+        "browser": "Chrome"
+      },
+      "geo_location": {
+        "country": "RU",
+        "city": "Moscow",
+        "latitude": 55.7558,
+        "longitude": 37.6176
+      },
+      "anomaly_type": "geo_location_mismatch"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "SANCTION_COUNTRY_TXN10001_20260513_024616",
+    "investigation_id": "inv_TXN10001_20260513_024616",
+    "transaction_id": "TXN10001",
+    "customer_id": "CUST003",
+    "amount": 15000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "IR",
+    "alert_hash": "hash_IR",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN",
+    "severity": "high",
+    "metadata": {
+      "reason": "Transfer to sanctioned country - recipient country appears on the sanctions monitoring list",
+      "policy": "transfer_to_sanctioned_country",
+      "sanctioned_country": "IR",
+      "destination_account": "ACC_EXT12345",
+      "transaction_type": "transfer",
+      "description": "Online transfer - high_value_rush",
+      "ip_address": "185.220.101.182"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "SANCTION_COUNTRY_TXN10004_20260513_024616",
+    "investigation_id": "inv_TXN10004_20260513_024616",
+    "transaction_id": "TXN10004",
+    "customer_id": "CUST003",
+    "amount": 45000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "KP",
+    "alert_hash": "hash_KP",
+    "timestamp": "2025-01-07T09:15:00Z",
+    "status": "OPEN",
+    "severity": "high",
+    "metadata": {
+      "reason": "Transfer to sanctioned country - recipient country appears on the sanctions monitoring list",
+      "policy": "transfer_to_sanctioned_country",
+      "sanctioned_country": "KP",
+      "destination_account": "ACC_EXT22222",
+      "transaction_type": "transfer",
+      "description": "Wire transfer - unusual_destination",
+      "ip_address": "10.0.0.1"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "TX_HIGH_VALUE_TXN10001_20260513_024911",
+    "investigation_id": "inv_TXN10001_20260513_024911",
+    "transaction_id": "TXN10001",
+    "customer_id": "CUST003",
+    "amount": 15000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "IR",
+    "alert_hash": "hash_15000.0",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN",
+    "severity": "high",
+    "metadata": {
+      "reason": "High-value transaction amount exceeds customer's normal transaction pattern",
+      "policy": "high_value_transaction_amount",
+      "amount": 15000.0,
+      "threshold": 10000,
+      "transaction_type": "transfer",
+      "description": "Online transfer - high_value_rush"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "TX_HIGH_VALUE_TXN10004_20260513_024911",
+    "investigation_id": "inv_TXN10004_20260513_024911",
+    "transaction_id": "TXN10004",
+    "customer_id": "CUST003",
+    "amount": 45000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "KP",
+    "alert_hash": "hash_45000.0",
+    "timestamp": "2025-01-07T09:15:00Z",
+    "status": "OPEN",
+    "severity": "high",
+    "metadata": {
+      "reason": "High-value transaction amount exceeds customer's normal transaction pattern",
+      "policy": "high_value_transaction_amount",
+      "amount": 45000.0,
+      "threshold": 10000,
+      "transaction_type": "transfer",
+      "description": "Wire transfer - unusual_destination"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "KYC_NEW_DEVICE_CUST003_20260513_024911",
+    "investigation_id": "inv_CUST003_20260513_024911",
+    "transaction_id": "",
+    "customer_id": "CUST003",
+    "amount": 0.0,
+    "currency": "USD",
+    "account_id": "CUST003",
+    "recipient_country": "",
+    "alert_hash": "hash_Windows 10_Chrome_185.220.101.182",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN",
+    "severity": "medium",
+    "metadata": {
+      "reason": "New or unrecognized device login - transaction initiated from a device not previously associated with the customer",
+      "policy": "new_device_login",
+      "event_type": "login_attempt",
+      "ip_address": "185.220.101.182",
+      "device_info": {
+        "device_type": "desktop",
+        "os": "Windows 10",
+        "browser": "Chrome"
+      },
+      "geo_location": {
+        "country": "RU",
+        "city": "Moscow",
+        "latitude": 55.7558,
+        "longitude": 37.6176
+      },
+      "anomaly_type": "geo_location_mismatch"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "SANCTION_COUNTRY_TXN10001_20260513_024911",
+    "investigation_id": "inv_TXN10001_20260513_024911",
+    "transaction_id": "TXN10001",
+    "customer_id": "CUST003",
+    "amount": 15000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "IR",
+    "alert_hash": "hash_IR",
+    "timestamp": "2025-01-10T02:30:00Z",
+    "status": "OPEN",
+    "severity": "high",
+    "metadata": {
+      "reason": "Transfer to sanctioned country - recipient country appears on the sanctions monitoring list",
+      "policy": "transfer_to_sanctioned_country",
+      "sanctioned_country": "IR",
+      "destination_account": "ACC_EXT12345",
+      "transaction_type": "transfer",
+      "description": "Online transfer - high_value_rush",
+      "ip_address": "185.220.101.182"
+    },
+    "customer_context": {}
+  },
+  {
+    "alert_id": "SANCTION_COUNTRY_TXN10004_20260513_024911",
+    "investigation_id": "inv_TXN10004_20260513_024911",
+    "transaction_id": "TXN10004",
+    "customer_id": "CUST003",
+    "amount": 45000.0,
+    "currency": "USD",
+    "account_id": "ACCCUST003001",
+    "recipient_country": "KP",
+    "alert_hash": "hash_KP",
+    "timestamp": "2025-01-07T09:15:00Z",
+    "status": "OPEN",
+    "severity": "high",
+    "metadata": {
+      "reason": "Transfer to sanctioned country - recipient country appears on the sanctions monitoring list",
+      "policy": "transfer_to_sanctioned_country",
+      "sanctioned_country": "KP",
+      "destination_account": "ACC_EXT22222",
+      "transaction_type": "transfer",
+      "description": "Wire transfer - unusual_destination",
+      "ip_address": "10.0.0.1"
+    },
+    "customer_context": {}
+  }
+]

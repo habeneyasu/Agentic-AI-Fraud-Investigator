@@ -186,10 +186,9 @@ CEREBRAS_API_KEY=your-cerebras-api-key
 GEMINI_API_KEY=your-gemini-api-key
 CEREBRAS_MODEL=llama3.1-70b
 GEMINI_MODEL=gemini-1.5-flash
-API_KEY=your-api-key
 ```
 
-Use strong, non-default secrets in any shared or internet-facing environment.
+Use strong, non-default secrets in any shared or internet-facing environment. Optionally set `API_KEY` on the API so clients must send matching `X-API-Key`; if unset, key checks are disabled for local demos.
 
 ### Run locally
 
@@ -271,7 +270,7 @@ Also: CLOSED_AUTO_CLEARED · CLOSED_LOW_RISK · PARTIAL_EVIDENCE · FAILED
 
 ## Security
 
-- Most business routes require `X-API-Key` matching the configured `API_KEY` (see route modules); `/health` and `/` are typically unauthenticated.
+- When `API_KEY` is set in the environment, business routes require matching `X-API-Key` (see `app/api/deps.py`). If `API_KEY` is unset or empty, key checks are skipped (local demos only). `/health` and `/` are typically unauthenticated.
 - HITL and audit routes also expect `X-User-Role` (`Analyst` / `Auditor`) where enforced in code.
 - JWT utilities exist for future auth expansion.
 - Request bodies validated with Pydantic v2.

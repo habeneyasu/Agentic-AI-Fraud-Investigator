@@ -1,0 +1,41 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.production.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.production.txt
+
+# Copy application code
+COPY app/ ./app/
+COPY dashboard/ ./dashboard/
+
+# Create logs directory
+RUN mkdir -p /app/logs
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash appuser
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Expose port 8080 (App Runner default)
+EXPOSE 8080
+
+# Run the application with Streamlit on port 8080
+# App Runner expects port 8080, so we'll run Streamlit as the main service
+CMD ["streamlit", "run", "dashboard/streamlit_app.py", "--server.port=8080", "--server.address=0.0.0.0", "--server.headless=true"]

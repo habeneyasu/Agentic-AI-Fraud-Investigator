@@ -10,6 +10,7 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.db.session import init_database, shutdown_database
 
 logger = get_logger(__name__)
 
@@ -18,7 +19,9 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting Agentic AI Fraud Investigator API",
                 env=settings.environment, version=settings.app_version)
+    app.state.orm_enabled = await init_database()
     yield
+    await shutdown_database()
     logger.info("Shutting down Agentic AI Fraud Investigator API")
 
 
@@ -45,9 +48,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 @app.get("/health", tags=["Health"])
-async def health_check():
-    return {"status": "healthy", "version": settings.app_version,
-            "service": settings.app_name, "env": settings.environment}
+async def health_check(request: Request):
+    return {
+        "status": "healthy",
+        "version": settings.app_version,
+        "service": settings.app_name,
+        "env": settings.environment,
+        "orm": getattr(request.app.state, "orm_enabled", False),
+    }
 
 
 @app.get("/", tags=["Root"])
@@ -55,7 +63,7 @@ async def root():
     return {"message": settings.app_name, "version": settings.app_version, "docs": "/docs"}
 
 
-# ── Register routers ──────────────────────────────────────────────────────────
+# ── Register routers ──────────────────────────────────────────────────
 from app.api.alerts import router as alerts_router
 from app.api.hitl import router as hitl_router
 from app.api.audit import router as audit_router
@@ -63,9 +71,9 @@ from app.api.transactions import router as transactions_router
 from app.api.kyc import router as kyc_router
 from app.api.sanctions import router as sanctions_router
 from app.api.triage import router as triage_router
-from app.api.investigation import router as investigation_router
 from app.api.fraud_memory import router as fraud_memory_router
 from app.api.investigate import router as investigate_router
+from app.api.evaluation import router as evaluation_router
 
 app.include_router(alerts_router, prefix="/v1")
 app.include_router(hitl_router)
@@ -74,9 +82,9 @@ app.include_router(transactions_router, prefix="/v1")
 app.include_router(kyc_router, prefix="/v1")
 app.include_router(sanctions_router, prefix="/v1")
 app.include_router(triage_router, prefix="/v1")
-app.include_router(investigation_router, prefix="/v1")
 app.include_router(fraud_memory_router, prefix="/v1")
 app.include_router(investigate_router, prefix="/v1")
+app.include_router(evaluation_router, prefix="/v1")
 
 
 if __name__ == "__main__":

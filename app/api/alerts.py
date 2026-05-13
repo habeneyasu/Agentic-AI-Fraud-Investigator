@@ -1,101 +1,118 @@
 """Alert intake endpoints."""
 
 import uuid
-from typing import Any, Dict, List
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Query
 
 from app.api.deps import RequireApiKey
-from app.core.logging import get_logger
-from app.data.data_loader import data_loader
-from app.shared.models import ApiMessageResponse, FraudAlertIngestRequest, FraudAlertIngestResponse
+from app.models.alert import AlertFilter, AlertListResponse
+from app.repositories.alert_repository import AlertRepository
+from app.services.alert_generation_service import AlertGenerationService
+from app.shared.models import FraudAlertIngestRequest, FraudAlertIngestResponse
 
-logger = get_logger(__name__)
 router = APIRouter(tags=["alerts"])
+alert_repository = AlertRepository()
+alert_generation_service = AlertGenerationService()
 
-demo_alerts: List[Dict[str, Any]] = []
 
-
-@router.post("/alerts", response_model=FraudAlertIngestResponse, status_code=202)
-async def ingest_alert(
-    payload: FraudAlertIngestRequest,
+@router.get(
+    "/alerts/by-customer/{customer_id}",
+    response_model=AlertListResponse,
+    summary="List alerts for one customer",
+)
+async def get_alerts_by_customer(
+    customer_id: str,
     _: None = RequireApiKey,
 ):
-    """Receive a fraud alert; stores demo alert and returns investigation id."""
-    investigation_id = f"inv_{uuid.uuid4().hex[:12]}"
+    """Return every alert whose ``customer_id`` matches (after strip)."""
+    cid = (customer_id or "").strip()
+    if not cid:
+        return AlertListResponse(alerts=[], total_count=0, filtered_count=0)
+    return await alert_repository.get_alerts(AlertFilter(customer_id=cid))
 
-    alert_data = {
-        "alert_id": f"ALERT_{payload.transaction_id}_{len(demo_alerts) + 1}",
+
+@router.get("/alerts", response_model=AlertListResponse)
+async def get_alerts(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    customer_id: Optional[str] = Query(None, description="Filter by customer ID"),
+    date_from: Optional[str] = Query(None, description="Filter from date"),
+    date_to: Optional[str] = Query(None, description="Filter to date"),
+    _: None = RequireApiKey,
+):
+    """List alerts in the API investigation queue (``runtime_alerts.json`` + in-memory).
+
+    This is **not** the raw transaction corpus in ``transactions.json``. The queue is empty
+    on a fresh process until you call ``POST /v1/alerts`` or ``POST /v1/alerts/generate``.
+    """
+    filters = AlertFilter(
+        status=status,
+        severity=severity,
+        customer_id=customer_id,
+        date_from=date_from,
+        date_to=date_to
+    )
+
+    response = await alert_repository.get_alerts(filters)
+    return response
+
+
+@router.post("/alerts", response_model=FraudAlertIngestResponse)
+async def ingest_fraud_alert(
+    body: FraudAlertIngestRequest,
+    _: None = RequireApiKey,
+):
+    """Accept a single alert from channels or the dashboard; persists to the same store as ``GET /v1/alerts``.
+
+    Idempotent on ``alert_hash``: a duplicate hash returns the existing investigation id without
+    appending another row. ``account_id`` is treated as ``customer_id`` (dashboard convention).
+    """
+    snapshot = await alert_repository.get_alerts(None)
+    for a in snapshot.alerts:
+        if a.alert_hash == body.alert_hash:
+            return FraudAlertIngestResponse(
+                message="Alert already ingested (duplicate alert_hash).",
+                investigation_id=a.investigation_id,
+                status=a.status,
+            )
+
+    investigation_id = f"inv_{body.transaction_id}_{uuid.uuid4().hex[:8]}"
+    alert_id = f"INGEST_{body.transaction_id}_{uuid.uuid4().hex[:6].upper()}"
+    customer_id = (body.metadata or {}).get("customer_id") or body.account_id
+    payload = {
+        "alert_id": alert_id,
         "investigation_id": investigation_id,
-        "transaction_id": payload.transaction_id,
-        "amount": payload.amount,
-        "currency": payload.currency,
-        "account_id": payload.account_id,
-        "recipient_country": payload.recipient_country,
-        "alert_hash": payload.alert_hash,
-        "metadata": payload.metadata or {},
-        "timestamp": payload.timestamp,
+        "transaction_id": body.transaction_id,
+        "customer_id": customer_id,
+        "amount": body.amount,
+        "currency": body.currency,
+        "account_id": body.account_id,
+        "recipient_country": body.recipient_country,
+        "alert_hash": body.alert_hash,
+        "timestamp": body.timestamp,
         "status": "OPEN",
-        "severity": payload.metadata.get("severity", "medium") if payload.metadata else "medium",
-        "customer_context": data_loader.get_customer_context(payload.account_id),
+        "severity": "medium",
+        "metadata": {**(body.metadata or {}), "ingest_source": "api_post_alerts"},
     }
-    demo_alerts.append(alert_data)
-
-    logger.info(
-        "Alert received",
-        transaction_id=payload.transaction_id,
-        amount=payload.amount,
-        country=payload.recipient_country,
-        investigation_id=investigation_id,
-    )
-
+    await alert_repository.create_alert(payload)
     return FraudAlertIngestResponse(
-        success=True,
+        message="Alert accepted for investigation.",
         investigation_id=investigation_id,
-        status="RECEIVED",
-        message="Investigation dispatched",
+        status="OPEN",
     )
 
 
-@router.get("/alerts", response_model=ApiMessageResponse)
-async def get_alerts(_: None = RequireApiKey):
-    return ApiMessageResponse(
-        success=True,
-        message="Alerts retrieved successfully",
-        data={
-            "alerts": demo_alerts,
-            "total_count": len(demo_alerts),
-            "open_count": len([a for a in demo_alerts if a["status"] == "OPEN"]),
-            "high_risk_count": len([a for a in demo_alerts if a.get("severity") == "high"]),
-        },
-    )
+@router.post("/alerts/generate", response_model=AlertListResponse)
+async def generate_alerts(
+    customer_id: Optional[str] = None,
+    _: None = RequireApiKey,
+):
+    """Generate alerts based on actual database data using three policy rules; persists each to the alert store."""
+    cid = (customer_id or "").strip()
+    generated = await alert_generation_service.generate_alerts_from_data(cid)
+    for alert in generated:
+        await alert_repository.create_alert(alert.model_dump())
 
-
-@router.get("/alerts/{alert_id}", response_model=ApiMessageResponse)
-async def get_alert(alert_id: str, _: None = RequireApiKey):
-    alert = next((a for a in demo_alerts if a["alert_id"] == alert_id), None)
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
-
-    return ApiMessageResponse(success=True, message="Alert retrieved successfully", data=alert)
-
-
-@router.put("/alerts/{alert_id}/status", response_model=ApiMessageResponse)
-async def update_alert_status(alert_id: str, status: str, _: None = RequireApiKey):
-    alert = next((a for a in demo_alerts if a["alert_id"] == alert_id), None)
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
-
-    alert["status"] = status
-    logger.info("Alert status updated", alert_id=alert_id, status=status)
-
-    return ApiMessageResponse(
-        success=True,
-        message=f"Alert status updated to {status}",
-        data={"alert_id": alert_id, "new_status": status},
-    )
-
-
-@router.get("/alerts/health", tags=["alerts"])
-async def alerts_health():
-    return {"status": "ok", "endpoint": "alerts"}
+    filters = AlertFilter(customer_id=cid) if cid else None
+    return await alert_repository.get_alerts(filters)

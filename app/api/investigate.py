@@ -1,13 +1,13 @@
-"""Investigation endpoints: triage, full parallel-agent run, HITL recommendation."""
+"""Unified investigation endpoints: triage, full parallel-agent run, HITL recommendation, and evaluation."""
 
 from __future__ import annotations
 
 import asyncio
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.deps import RequireApiKey
@@ -18,15 +18,18 @@ from app.services.kyc_service import KYCService
 from app.services.sanctions_service import SanctionsService
 from app.services.ai_reasoning_service import InvestigationReasoningService
 from app.llm.orchestration import synthesize_investigation, triage_alert, get_hitl_recommendation
+from app.services.investigation_service import InvestigationService
+from app.shared.models import AgentResult, OpenInvestigationApiRequest
 
 logger = get_logger(__name__)
-router = APIRouter(tags=["investigate"])
+router = APIRouter(tags=["investigation"])
 
 _data_loader = DataLoader()
 _tx_service = TransactionService()
 _kyc_service = KYCService()
 _san_service = SanctionsService()
 _ai_service = InvestigationReasoningService()
+_investigation_service = InvestigationService()
 
 
 class FullInvestigationApiRequest(BaseModel):
@@ -61,7 +64,7 @@ class AnalystBriefingApiRequest(BaseModel):
     risk_result: dict[str, Any]
 
 
-@router.post("/investigate/triage")
+@router.post("/investigation/triage")
 async def run_triage(request: OrchestratedTriageApiRequest, _: None = RequireApiKey):
     customer_context = _data_loader.get_customer_context(request.customer_id) or {}
 
@@ -79,14 +82,43 @@ async def run_triage(request: OrchestratedTriageApiRequest, _: None = RequireApi
     return {"success": True, "data": result}
 
 
-@router.post("/investigate/full")
+@router.post("/investigation/start")
+async def start_investigation(request: OpenInvestigationApiRequest, _: None = RequireApiKey):
+    response = await _investigation_service.start_investigation(request.investigation.dict())
+    if not response["success"]:
+        raise HTTPException(status_code=500, detail=response["data"].get("error"))
+    return response["data"]
+
+
+@router.get("/investigation/{investigation_id}/status")
+async def get_investigation_status(investigation_id: str, _: None = RequireApiKey):
+    response = _investigation_service.get_investigation_status(investigation_id)
+    if not response["success"]:
+        raise HTTPException(status_code=404, detail=response["data"].get("error"))
+    return response["data"]
+
+
+@router.post("/investigation/{investigation_id}/agents/{agent_type}")
+async def run_agent(
+    investigation_id: str,
+    agent_type: str,
+    agent_data: Dict[str, Any],
+    _: None = RequireApiKey,
+):
+    response = await _investigation_service.run_agent(investigation_id, agent_type, agent_data)
+    if not response["success"]:
+        raise HTTPException(status_code=500, detail=response["data"].get("error"))
+    return response["data"]
+
+
+@router.post("/investigation/full")
 async def run_full_investigation(request: FullInvestigationApiRequest, _: None = RequireApiKey):
     investigation_id = f"inv_{uuid.uuid4().hex[:12]}"
     logger.info(f"Starting full investigation {investigation_id} for {request.customer_id}")
 
     # Load customer context
     customer_context = _data_loader.get_customer_context(request.customer_id) or {}
-    customer_txns    = customer_context.get("transactions", [])
+    customer_txns = customer_context.get("transactions", [])
 
     # Build agent inputs
     transaction_data = {
@@ -103,7 +135,7 @@ async def run_full_investigation(request: FullInvestigationApiRequest, _: None =
     }
 
     kyc_event_data = {
-        "customer_id":  request.customer_id,
+        "customer_id": request.customer_id,
         "event_type":   "transaction_attempt",
         "timestamp":    request.timestamp,
         "ip_address":   request.ip_address,
@@ -119,7 +151,7 @@ async def run_full_investigation(request: FullInvestigationApiRequest, _: None =
         "description":  f"Transfer destination in {request.destination_country}",
     }
 
-    # ── Parallel agent execution ──────────────────────────────────────────────
+    # ── Parallel agent execution ──────────────────────────────────────
     tx_task  = _tx_service.analyze_transaction(transaction_data, customer_txns)
     kyc_task = _kyc_service.analyze_kyc_event(kyc_event_data)
     san_task = _san_service.analyze_sanctions_risk(entity_data)
@@ -162,7 +194,7 @@ async def run_full_investigation(request: FullInvestigationApiRequest, _: None =
     return {
         "success": True,
         "data": {
-            "investigation_id":  investigation_id,
+            "investigation_id": investigation_id,
             "customer_id":       request.customer_id,
             "transaction_id":    request.transaction_id,
             "status":            "COMPLETED",
@@ -191,7 +223,7 @@ async def run_full_investigation(request: FullInvestigationApiRequest, _: None =
     }
 
 
-@router.post("/investigate/hitl-recommendation")
+@router.post("/investigation/hitl-recommendation")
 async def get_hitl_recommendation_endpoint(
     request: AnalystBriefingApiRequest,
     _: None = RequireApiKey,
@@ -207,6 +239,40 @@ async def get_hitl_recommendation_endpoint(
     return {"success": True, "data": result}
 
 
-@router.get("/investigate/health")
-async def investigate_health():
-    return {"status": "ok", "endpoint": "investigate"}
+@router.post("/investigation/{investigation_id}/synthesize")
+async def synthesize_investigation_endpoint(
+    investigation_id: str,
+    agent_results: Dict[str, AgentResult],
+    _: None = RequireApiKey,
+):
+    agent_results_dict = {agent_type: result.dict() for agent_type, result in agent_results.items()}
+
+    # Load customer context for synthesis
+    investigation_data = {
+        "investigation_id": investigation_id,
+        "agent_results": agent_results_dict,
+        "customer_context": _data_loader.get_customer_context("UNKNOWN_CUSTOMER") or {},
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    # Use AI reasoning service for synthesis
+    synthesis_result = await synthesize_investigation(
+        transaction_result=agent_results_dict.get("transaction", {}),
+        kyc_result=agent_results_dict.get("kyc", {}),
+        sanctions_result=agent_results_dict.get("sanctions", {}),
+        customer_context=investigation_data["customer_context"],
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "investigation_id": investigation_id,
+            "synthesis_result": synthesis_result,
+            "synthesis_timestamp": datetime.utcnow().isoformat(),
+        },
+    }
+
+
+@router.get("/investigation/health")
+async def investigation_health():
+    return {"status": "ok", "endpoint": "investigation"}

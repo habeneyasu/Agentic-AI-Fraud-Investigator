@@ -9,7 +9,10 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 def require_api_key(x_api_key: str | None = Security(api_key_header)) -> None:
-    if x_api_key != settings.api_key:
+    expected = (settings.api_key or "").strip()
+    if not expected:
+        return
+    if (x_api_key or "").strip() != expected:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 

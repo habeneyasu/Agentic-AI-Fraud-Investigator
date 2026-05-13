@@ -9,7 +9,7 @@ from app.services.base import BaseService
 from app.services.transaction_service import TransactionService
 from app.services.kyc_service import KYCService
 from app.services.sanctions_service import SanctionsService
-from app.services.triage_service import CaseTriageRulesService
+from app.services.triage_service import TriageService
 
 
 class InvestigationService(BaseService):
@@ -21,7 +21,7 @@ class InvestigationService(BaseService):
         self.transaction_service = TransactionService()
         self.kyc_service = KYCService()
         self.sanctions_service = SanctionsService()
-        self.triage_service = CaseTriageRulesService()
+        self.triage_service = TriageService()
     
     async def start_investigation(self, investigation_data: Dict[str, Any]) -> Dict[str, Any]:
         """Start complete investigation workflow."""
