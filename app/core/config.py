@@ -1,14 +1,36 @@
+from pathlib import Path
 from typing import List, Optional
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# ``config.py`` → ``app/core/`` → repository root is two levels above ``app``.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_DOTENV_FILE = _PROJECT_ROOT / ".env"
+# Load cwd ``.env`` first, then repository-root ``.env`` so keys work from either location (root wins on duplicates).
+_ENV_FILES: tuple[str, ...] = (
+    (".env", str(_DOTENV_FILE)) if _DOTENV_FILE.is_file() else (".env",)
+)
+
+
+def _usable_llm_api_key(value: Optional[str]) -> bool:
+    """Reject empty values and obvious ``.env.example`` placeholders (length is not validated)."""
+    v = (value or "").strip()
+    if not v:
+        return False
+    low = v.lower()
+    if "your_" in low and "here" in low:
+        return False
+    if low in ("xxx", "changeme", "placeholder", "none", "null"):
+        return False
+    return True
 
 
 class Settings(BaseSettings):
     """Runtime configuration loaded from environment and optional `.env` file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=list(_ENV_FILES),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -48,11 +70,15 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = Field(None, env="OPENAI_API_KEY")
     anthropic_api_key: Optional[str] = Field(None, env="ANTHROPIC_API_KEY")
     cerebras_api_key: Optional[str] = Field(None, env="CEREBRAS_API_KEY")
-    gemini_api_key: Optional[str] = Field(None, env="GEMINI_API_KEY")
+    gemini_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        description="Gemini / Google AI Studio key (``GEMINI_API_KEY`` or ``GOOGLE_API_KEY``).",
+    )
     openai_model: str = "gpt-4-turbo-preview"
     anthropic_model: str = "claude-3-opus-20240229"
     cerebras_model: str = "llama3.1-8b"
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-2.0-flash"
     
     # Security
     secret_key: str = Field(
@@ -71,6 +97,20 @@ class Settings(BaseSettings):
     risk_score_threshold: float = 0.7
     transaction_amount_threshold: float = 10000.0
     max_investigation_time_hours: int = 24
+
+    # Phase-1 triage narrative (LLM explains deterministic outcome; does not change decisions)
+    triage_narrative_enabled: bool = Field(
+        default=False,
+        env="TRIAGE_NARRATIVE_ENABLED",
+        description="When true, POST /v1/triage/assess may call the fast LLM for an initial suspicion note (requires CEREBRAS or GEMINI).",
+    )
+    triage_narrative_timeout_seconds: float = Field(
+        default=25.0,
+        env="TRIAGE_NARRATIVE_TIMEOUT_SECONDS",
+        ge=2.0,
+        le=120.0,
+        description="Hard cap for each narrative LLM call during batch triage.",
+    )
     
     # Monitoring
     enable_sentry: bool = False
@@ -105,8 +145,35 @@ class Settings(BaseSettings):
         env="CELERY_RESULT_BACKEND"
     )
 
+    def cerebras_key_usable(self) -> bool:
+        return _usable_llm_api_key(self.cerebras_api_key)
 
-# Global settings instance
+    def gemini_key_usable(self) -> bool:
+        return _usable_llm_api_key(self.gemini_api_key)
+
+    def llm_narrative_credentials_configured(self) -> bool:
+        """True when at least one provider key is present and not an obvious placeholder."""
+        return self.cerebras_key_usable() or self.gemini_key_usable()
+
+    def llm_narrative_env_hint(self) -> str:
+        """Safe one-line explanation when ``llm_narrative_credentials_configured()`` is false (no secrets)."""
+        if self.llm_narrative_credentials_configured():
+            return ""
+        c = (self.cerebras_api_key or "").strip()
+        g = (self.gemini_api_key or "").strip()
+        if not c and not g:
+            return (
+                "No LLM keys loaded. Add ``CEREBRAS_API_KEY`` and/or ``GEMINI_API_KEY`` (or ``GOOGLE_API_KEY``) "
+                f"to ``{_DOTENV_FILE}``, or export them in your shell (shell vars override ``.env``)."
+            )
+        bits = []
+        if c and not self.cerebras_key_usable():
+            bits.append("``CEREBRAS_API_KEY`` looks like a template/placeholder")
+        if g and not self.gemini_key_usable():
+            bits.append("``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` looks like a template/placeholder")
+        if bits:
+            return " ".join(bits) + " — replace with a real key."
+        return ""
 settings = Settings()
 
 

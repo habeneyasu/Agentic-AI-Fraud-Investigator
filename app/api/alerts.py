@@ -6,8 +6,12 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from app.api.deps import RequireApiKey
-from app.models.alert import AlertFilter, AlertListResponse
-from app.repositories.alert_repository import AlertRepository
+from app.models.alert import AlertFilter, AlertGenerateResponse, AlertListResponse
+from app.repositories.alert_repository import (
+    AlertRepository,
+    fetch_postgres_alert_hashes,
+    save_generated_alert_to_sql,
+)
 from app.services.alert_generation_service import AlertGenerationService
 from app.shared.models import FraudAlertIngestRequest, FraudAlertIngestResponse
 
@@ -41,11 +45,7 @@ async def get_alerts(
     date_to: Optional[str] = Query(None, description="Filter to date"),
     _: None = RequireApiKey,
 ):
-    """List alerts in the API investigation queue (``runtime_alerts.json`` + in-memory).
-
-    This is **not** the raw transaction corpus in ``transactions.json``. The queue is empty
-    on a fresh process until you call ``POST /v1/alerts`` or ``POST /v1/alerts/generate``.
-    """
+    """List merged alerts: Postgres ``alerts`` table plus ``runtime_alerts.json`` (dedupe by ``alert_hash``; SQL wins)."""
     filters = AlertFilter(
         status=status,
         severity=severity,
@@ -58,61 +58,43 @@ async def get_alerts(
     return response
 
 
-@router.post("/alerts", response_model=FraudAlertIngestResponse)
-async def ingest_fraud_alert(
-    body: FraudAlertIngestRequest,
-    _: None = RequireApiKey,
-):
-    """Accept a single alert from channels or the dashboard; persists to the same store as ``GET /v1/alerts``.
-
-    Idempotent on ``alert_hash``: a duplicate hash returns the existing investigation id without
-    appending another row. ``account_id`` is treated as ``customer_id`` (dashboard convention).
-    """
-    snapshot = await alert_repository.get_alerts(None)
-    for a in snapshot.alerts:
-        if a.alert_hash == body.alert_hash:
-            return FraudAlertIngestResponse(
-                message="Alert already ingested (duplicate alert_hash).",
-                investigation_id=a.investigation_id,
-                status=a.status,
-            )
-
-    investigation_id = f"inv_{body.transaction_id}_{uuid.uuid4().hex[:8]}"
-    alert_id = f"INGEST_{body.transaction_id}_{uuid.uuid4().hex[:6].upper()}"
-    customer_id = (body.metadata or {}).get("customer_id") or body.account_id
-    payload = {
-        "alert_id": alert_id,
-        "investigation_id": investigation_id,
-        "transaction_id": body.transaction_id,
-        "customer_id": customer_id,
-        "amount": body.amount,
-        "currency": body.currency,
-        "account_id": body.account_id,
-        "recipient_country": body.recipient_country,
-        "alert_hash": body.alert_hash,
-        "timestamp": body.timestamp,
-        "status": "OPEN",
-        "severity": "medium",
-        "metadata": {**(body.metadata or {}), "ingest_source": "api_post_alerts"},
-    }
-    await alert_repository.create_alert(payload)
-    return FraudAlertIngestResponse(
-        message="Alert accepted for investigation.",
-        investigation_id=investigation_id,
-        status="OPEN",
-    )
-
-
-@router.post("/alerts/generate", response_model=AlertListResponse)
+@router.post("/alerts/generate", response_model=AlertGenerateResponse)
 async def generate_alerts(
-    customer_id: Optional[str] = None,
+    customer_id: Optional[str] = Query(
+        None,
+        description="Optional ``customer_id`` to scope ``transactions`` / ``kyc_profiles``; omit for all rows.",
+    ),
     _: None = RequireApiKey,
 ):
-    """Generate alerts based on actual database data using three policy rules; persists each to the alert store."""
+    """Evaluate policies on Postgres ``transactions`` / ``kyc_profiles`` / sanctions tables, insert into ``alerts``, and append to the runtime JSON queue.
+
+    Deduplicates on ``alert_hash`` across both the ``alerts`` table and the JSON queue. Response fields:
+    ``postgres_inserted`` (SQL rows), ``created`` (JSON queue rows).
+    """
     cid = (customer_id or "").strip()
+    existing = await alert_repository.get_alerts(None)
+    known_hashes = {a.alert_hash for a in existing.alerts} | fetch_postgres_alert_hashes()
     generated = await alert_generation_service.generate_alerts_from_data(cid)
+    created = 0
+    postgres_inserted = 0
+    skipped_duplicates = 0
     for alert in generated:
+        if alert.alert_hash in known_hashes:
+            skipped_duplicates += 1
+            continue
+        if save_generated_alert_to_sql(alert):
+            postgres_inserted += 1
         await alert_repository.create_alert(alert.model_dump())
+        known_hashes.add(alert.alert_hash)
+        created += 1
 
     filters = AlertFilter(customer_id=cid) if cid else None
-    return await alert_repository.get_alerts(filters)
+    base = await alert_repository.get_alerts(filters)
+    return AlertGenerateResponse(
+        alerts=base.alerts,
+        total_count=base.total_count,
+        filtered_count=base.filtered_count,
+        created=created,
+        postgres_inserted=postgres_inserted,
+        skipped_duplicates=skipped_duplicates,
+    )

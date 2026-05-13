@@ -64,6 +64,36 @@ Respond ONLY with valid JSON:
 }}"""
 
 
+def get_triage_initial_suspicion_prompt(
+    alert_summary: dict[str, Any],
+    risk_assessment: dict[str, Any],
+    investigation_decision: dict[str, Any],
+) -> str:
+    """Narrate why the rule-based triage outcome applies—decision is authoritative; model must not change it."""
+    return f"""You are a fraud-operations writer. A deterministic engine has ALREADY scored this alert and chosen an investigation action. Your task is ONLY to produce a concise, factual "Initial Suspicion" narrative for humans and auditors.
+
+AUTHORITATIVE OUTCOME (do not contradict, reinterpret, or replace):
+{_format_dict(investigation_decision)}
+
+DETERMINISTIC RISK ASSESSMENT:
+{_format_dict(risk_assessment)}
+
+ALERT FACTS (subset):
+{_format_dict(alert_summary)}
+
+Rules:
+- Explain in plain English why the engine's action is consistent with the facts and scores.
+- Do NOT recommend a different action or imply the engine was wrong.
+- Do NOT invent amounts, countries, or customer data not present above.
+- 2–4 sentences in "initial_suspicion_note"; optional short bullets in "key_observations".
+
+Respond ONLY with valid JSON:
+{{
+  "initial_suspicion_note": "<2-4 sentences>",
+  "key_observations": ["<optional bullet>", "<optional bullet>"]
+}}"""
+
+
 def get_triage_prompt(alert_data: dict, customer_context: dict) -> str:
     return f"""You are a fraud triage specialist. Quickly assess this alert and decide whether to auto-close or escalate for full investigation.
 
