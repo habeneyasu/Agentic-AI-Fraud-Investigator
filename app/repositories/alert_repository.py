@@ -123,6 +123,10 @@ def _apply_alert_filters(alerts: List[Alert], filters: Optional[AlertFilter]) ->
     if filters.customer_id:
         want = _customer_id_norm(filters.customer_id)
         out = [a for a in out if _customer_id_norm(a.customer_id) == want]
+    if filters.alert_id:
+        want_id = (filters.alert_id or "").strip()
+        if want_id:
+            out = [a for a in out if a.alert_id == want_id]
     if filters.date_from:
         out = [a for a in out if a.timestamp >= filters.date_from]
     if filters.date_to:
@@ -158,6 +162,9 @@ def fetch_postgres_alerts(filters: Optional[AlertFilter] = None) -> List[Alert]:
                 cid = (filters.customer_id or "").strip()
                 if cid:
                     q = q.filter(func.lower(AlertORM.customer_id) == cid.lower())
+                aid = (filters.alert_id or "").strip()
+                if aid:
+                    q = q.filter(AlertORM.alert_id == aid)
             rows = q.all()
             alerts = [_orm_to_alert(r) for r in rows]
         return _apply_alert_filters(alerts, filters)
@@ -348,6 +355,9 @@ class AlertRepository:
             want = _customer_id_norm(filters.customer_id)
             if want:
                 json_pool = [a for a in json_pool if _customer_id_norm(a.customer_id) == want]
+            aid = (filters.alert_id or "").strip()
+            if aid:
+                json_pool = [a for a in json_pool if a.alert_id == aid]
         by_hash: dict[str, Alert] = {}
         for a in pg_alerts:
             by_hash[a.alert_hash] = a

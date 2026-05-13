@@ -68,6 +68,7 @@ class AlertFilter(BaseModel):
     status: Optional[str] = None
     severity: Optional[str] = None
     customer_id: Optional[str] = None
+    alert_id: Optional[str] = None
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     alert_type: Optional[str] = None

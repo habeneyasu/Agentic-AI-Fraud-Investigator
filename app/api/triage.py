@@ -42,20 +42,27 @@ def _normalize_customer_id(value: Optional[str]) -> Optional[str]:
     return s
 
 
+def _normalize_alert_id(value: Optional[str]) -> Optional[str]:
+    s = (value or "").strip()
+    return s if s else None
+
+
 @router.post("/triage/assess", response_model=TriageAssessmentResponse)
 async def assess_alerts(
     payload: Optional[TriageAssessBody] = Body(default=None),
-    customer_id: Optional[str] = Query(
-        default=None,
-        description="Optional customer filter — **only** supported source; use ``?customer_id=CUST003`` (not the JSON body).",
-    ),
+    customer_id: Optional[str] = Query(default=None, description="Customer filter (query overrides body)."),
+    alert_id: Optional[str] = Query(default=None, description="Optional alert id filter."),
     _: None = RequireApiKey,
 ):
-    """Triage + optional narrative. Customer scope: query ``customer_id`` only."""
+    """Triage + optional narrative (scope: query ``customer_id`` / ``alert_id`` or body ``customer_id``)."""
     try:
         body = payload or TriageAssessBody()
+        q_cust = _normalize_customer_id(customer_id)
+        body_cust = _normalize_customer_id(getattr(body, "customer_id", None))
+        effective_customer = q_cust or body_cust
         request = TriageAssessmentRequest(
-            customer_id=_normalize_customer_id(customer_id),
+            customer_id=effective_customer,
+            alert_id=_normalize_alert_id(alert_id),
             include_initial_suspicion_note=body.include_initial_suspicion_note,
         )
 

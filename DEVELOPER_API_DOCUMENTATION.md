@@ -13,10 +13,12 @@ Development: http://localhost:8000
 
 ## Authentication
 
-All API endpoints require API key authentication. Include the API key in the request header:
+**Local development (default):** no API key is required. Leave `API_KEY` unset (or empty) in the environment; route guards in `app/api/deps.py` then skip the check.
 
-```
-X-API-Key: your-api-key-here
+**Deployed / locked-down environments:** set the `API_KEY` environment variable to a strong secret. Clients must send the same value in the header:
+
+```http
+X-API-Key: <your API_KEY value>
 ```
 
 ## API Endpoints
@@ -27,7 +29,6 @@ X-API-Key: your-api-key-here
 ```http
 POST /alerts
 Content-Type: application/json
-X-API-Key: your-api-key
 ```
 
 **Request Body:**
@@ -61,7 +62,6 @@ X-API-Key: your-api-key
 #### Get Alert Details
 ```http
 GET /alerts/{alert_id}
-X-API-Key: your-api-key
 ```
 
 **Response (200):**
@@ -91,7 +91,6 @@ X-API-Key: your-api-key
 ```http
 POST /investigation/start
 Content-Type: application/json
-X-API-Key: your-api-key
 ```
 
 **Request Body:**
@@ -127,7 +126,6 @@ X-API-Key: your-api-key
 #### Get Investigation Status
 ```http
 GET /investigation/{investigation_id}/status
-X-API-Key: your-api-key
 ```
 
 **Response (200):**
@@ -165,7 +163,6 @@ X-API-Key: your-api-key
 ```http
 POST /investigation/{investigation_id}/agents/{agent_type}
 Content-Type: application/json
-X-API-Key: your-api-key
 ```
 
 **Request Body:**
@@ -215,7 +212,6 @@ X-API-Key: your-api-key
 ```http
 POST /investigation/{investigation_id}/synthesize
 Content-Type: application/json
-X-API-Key: your-api-key
 ```
 
 **Request Body:**
@@ -272,7 +268,6 @@ X-API-Key: your-api-key
 #### Get Customer Context
 ```http
 GET /data/customers/{customer_id}
-X-API-Key: your-api-key
 ```
 
 **Response (200):**
@@ -306,7 +301,6 @@ X-API-Key: your-api-key
 #### Get Transaction History
 ```http
 GET /data/transactions/{customer_id}?limit=50&days=30
-X-API-Key: your-api-key
 ```
 
 **Response (200):**
@@ -352,7 +346,6 @@ X-API-Key: your-api-key
 ```http
 POST /investigation/{investigation_id}/hitl/decision
 Content-Type: application/json
-X-API-Key: your-api-key
 ```
 
 **Request Body:**
@@ -397,7 +390,6 @@ X-API-Key: your-api-key
 #### Get HITL Queue
 ```http
 GET /investigation/hitl/queue?status=pending&priority=high
-X-API-Key: your-api-key
 ```
 
 **Response (200):**
@@ -431,7 +423,6 @@ X-API-Key: your-api-key
 #### Get Investigation Metrics
 ```http
 GET /analytics/metrics?period=7d
-X-API-Key: your-api-key
 ```
 
 **Response (200):**
@@ -476,7 +467,6 @@ X-API-Key: your-api-key
 ```http
 POST /reports/compliance
 Content-Type: application/json
-X-API-Key: your-api-key
 ```
 
 **Request Body:**
@@ -546,7 +536,6 @@ GET /health
 #### System Status
 ```http
 GET /system/status
-X-API-Key: your-api-key
 ```
 
 **Response (200):**
@@ -629,7 +618,6 @@ X-RateLimit-Reset: 16467890
 ```http
 POST /webhooks/configure
 Content-Type: application/json
-X-API-Key: your-api-key
 ```
 
 **Request Body:**
@@ -677,10 +665,10 @@ X-API-Key: your-api-key
 ```python
 from fraud_investigator import FraudInvestigatorClient
 
-# Initialize client
+# Initialize client (api_key=None for local when API_KEY is unset on the server)
 client = FraudInvestigatorClient(
-    api_key="your-api-key",
-    base_url="https://api.fraud-investigator.example.com"
+    api_key=None,
+    base_url="http://localhost:8000"
 )
 
 # Create alert
@@ -711,8 +699,8 @@ print(f"Status: {status.status}, Progress: {status.progress}")
 import { FraudInvestigatorClient } from '@fraud-investigator/sdk';
 
 const client = new FraudInvestigatorClient({
-  apiKey: 'your-api-key',
-  baseUrl: 'https://api.fraud-investigator.example.com'
+  apiKey: undefined, // omit for local when API_KEY is unset on the server
+  baseUrl: 'http://localhost:8000'
 });
 
 // Create alert and start investigation
@@ -734,7 +722,7 @@ async function processTransaction(transactionData) {
 ### Test Environment
 
 - **URL**: `https://api-test.fraud-investigator.example.com`
-- **API Key**: `test-api-key-12345`
+- **API key**: not used locally; if the test server sets `API_KEY`, send matching `X-API-Key`
 - **Database**: Isolated test database with sample data
 
 ### Sample Test Cases
@@ -746,7 +734,6 @@ curl -X GET https://api-test.fraud-investigator.example.com/health
 # Create test alert
 curl -X POST https://api-test.fraud-investigator.example.com/alerts \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: test-api-key-12345" \
   -d '{
     "transaction_id": "TEST001",
     "amount": 5000.00,

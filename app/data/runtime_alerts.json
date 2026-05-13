@@ -10,7 +10,7 @@
     "recipient_country": "IR",
     "alert_hash": "hash_15000.0",
     "timestamp": "2025-01-10T02:30:00Z",
-    "status": "OPEN_FOR_INVESTIGATION",
+    "status": "MONITORING",
     "severity": "high",
     "metadata": {
       "reason": "High-value transaction amount exceeds customer's normal transaction pattern",
@@ -23,7 +23,7 @@
         "score": 0.5,
         "severity": "MEDIUM",
         "auto_close_eligible": true,
-        "assessment_timestamp": "2026-05-12T16:23:53.427891",
+        "assessment_timestamp": "2026-05-13T09:48:17.027408",
         "scoring_factors": {
           "transaction_amount": 15000.0,
           "amount_tier": "medium",
@@ -32,10 +32,18 @@
       },
       "investigation_decision": {
         "action": "MONITOR",
-        "reasoning": "Medium risk score (0.500) - monitoring recommended",
+        "reasoning": "MEDIUM severity, score 0.500 (transaction amount $15,000 (medium tier)) \u2014 monitor band (score \u2265 0.40 and below escalation at 0.60); enhanced monitoring recommended.",
         "confidence": 0.75,
-        "decision_timestamp": "2026-05-12T16:23:53.427920"
-      }
+        "decision_timestamp": "2026-05-13T09:48:17.027464Z"
+      },
+      "initial_suspicion_note": "A high-value transaction of $15,000 was detected, prompting a medium severity alert. The transaction's amount falls within the medium tier threshold, which triggered a monitoring action. Enhanced monitoring is recommended to further assess the situation.",
+      "initial_suspicion_source": "llm",
+      "initial_suspicion_generated_at": "2026-05-13T09:48:17.505277+00:00",
+      "initial_suspicion_key_observations": [
+        "Transaction amount: $15,000",
+        "Customer ID: CUST003",
+        "Transaction ID: TXN10001"
+      ]
     },
     "customer_context": {}
   },
@@ -63,7 +71,7 @@
         "score": 0.7,
         "severity": "HIGH",
         "auto_close_eligible": false,
-        "assessment_timestamp": "2026-05-12T16:23:53.429778",
+        "assessment_timestamp": "2026-05-13T09:48:19.522614",
         "scoring_factors": {
           "transaction_amount": 45000.0,
           "amount_tier": "high",
@@ -72,10 +80,18 @@
       },
       "investigation_decision": {
         "action": "ESCALATE_FOR_INVESTIGATION",
-        "reasoning": "High risk score (0.700) - investigation required",
+        "reasoning": "HIGH severity, score 0.700 (transaction amount $45,000 (high tier)) \u2014 at or above the high-risk threshold (0.60); investigation required.",
         "confidence": 0.85,
-        "decision_timestamp": "2026-05-12T16:23:53.429806"
-      }
+        "decision_timestamp": "2026-05-13T09:48:19.522652Z"
+      },
+      "initial_suspicion_note": "A high-value transaction of $45,000 was detected, exceeding the high-risk threshold of $15,000. This triggered an investigation due to the high severity score of 0.7.",
+      "initial_suspicion_source": "llm",
+      "initial_suspicion_generated_at": "2026-05-13T09:48:19.976600+00:00",
+      "initial_suspicion_key_observations": [
+        "Transaction amount: $45,000",
+        "Customer ID: CUST003",
+        "Transaction ID: TXN10004"
+      ]
     },
     "customer_context": {}
   },
@@ -113,7 +129,7 @@
         "score": 0.8,
         "severity": "CRITICAL",
         "auto_close_eligible": false,
-        "assessment_timestamp": "2026-05-12T16:23:53.430599",
+        "assessment_timestamp": "2026-05-13T09:48:17.513843",
         "scoring_factors": {
           "anomaly_type": "geo_location_mismatch",
           "anomaly_tier": "geo_mismatch",
@@ -122,10 +138,17 @@
       },
       "investigation_decision": {
         "action": "ESCALATE_FOR_INVESTIGATION",
-        "reasoning": "Critical risk score (0.800) - immediate investigation required",
+        "reasoning": "CRITICAL severity, score 0.800 (device / login anomaly (geo_location_mismatch)) \u2014 at or above the critical threshold (0.80); immediate investigation required.",
         "confidence": 0.95,
-        "decision_timestamp": "2026-05-12T16:23:53.430620"
-      }
+        "decision_timestamp": "2026-05-13T09:48:17.513898Z"
+      },
+      "initial_suspicion_note": "A critical severity alert was triggered due to a geo-location mismatch during a new device login, indicating a potential security risk. The engine's decision to escalate for investigation is consistent with the high score and critical severity. The customer's login from an unexpected location warrants further examination.",
+      "initial_suspicion_source": "llm",
+      "initial_suspicion_generated_at": "2026-05-13T09:48:17.990174+00:00",
+      "initial_suspicion_key_observations": [
+        "The anomaly type was a geo-location mismatch.",
+        "The customer's policy was new device login."
+      ]
     },
     "customer_context": {}
   },
@@ -154,7 +177,7 @@
         "score": 0.95,
         "severity": "CRITICAL",
         "auto_close_eligible": false,
-        "assessment_timestamp": "2026-05-12T16:23:53.431388",
+        "assessment_timestamp": "2026-05-13T09:48:18.000844",
         "scoring_factors": {
           "sanctioned_country": "IR",
           "country_tier": "critical",
@@ -163,10 +186,17 @@
       },
       "investigation_decision": {
         "action": "ESCALATE_FOR_INVESTIGATION",
-        "reasoning": "Critical risk score (0.950) - immediate investigation required",
+        "reasoning": "CRITICAL severity, score 0.950 (sanctioned destination IR (critical tier)) \u2014 at or above the critical threshold (0.80); immediate investigation required.",
         "confidence": 0.95,
-        "decision_timestamp": "2026-05-12T16:23:53.431411"
-      }
+        "decision_timestamp": "2026-05-13T09:48:18.000899Z"
+      },
+      "initial_suspicion_note": "A high-risk transaction was detected, transferring $15,000 USD to a sanctioned country (Iran) with a critical severity score of 0.95, indicating a high likelihood of a malicious activity.",
+      "initial_suspicion_source": "llm",
+      "initial_suspicion_generated_at": "2026-05-13T09:48:18.524808+00:00",
+      "initial_suspicion_key_observations": [
+        "The transaction was flagged due to its high severity and the destination country being on the critical tier of sanctions.",
+        "The customer (CUST003) initiated a transfer to a sanctioned country, violating the transfer to sanctioned country policy."
+      ]
     },
     "customer_context": {}
   },
@@ -195,7 +225,7 @@
         "score": 0.95,
         "severity": "CRITICAL",
         "auto_close_eligible": false,
-        "assessment_timestamp": "2026-05-12T16:23:53.432179",
+        "assessment_timestamp": "2026-05-13T09:48:19.983629",
         "scoring_factors": {
           "sanctioned_country": "KP",
           "country_tier": "critical",
@@ -204,10 +234,17 @@
       },
       "investigation_decision": {
         "action": "ESCALATE_FOR_INVESTIGATION",
-        "reasoning": "Critical risk score (0.950) - immediate investigation required",
+        "reasoning": "CRITICAL severity, score 0.950 (sanctioned destination KP (critical tier)) \u2014 at or above the critical threshold (0.80); immediate investigation required.",
         "confidence": 0.95,
-        "decision_timestamp": "2026-05-12T16:23:53.432197"
-      }
+        "decision_timestamp": "2026-05-13T09:48:19.983681Z"
+      },
+      "initial_suspicion_note": "A high-risk transaction was detected, transferring $45,000 USD to a sanctioned country (North Korea) with a critical severity score of 0.95. This score exceeded the critical threshold, prompting an immediate investigation.",
+      "initial_suspicion_source": "llm",
+      "initial_suspicion_generated_at": "2026-05-13T09:48:20.427237+00:00",
+      "initial_suspicion_key_observations": [
+        "The transaction was flagged for transferring funds to a sanctioned country.",
+        "The customer's transaction was classified as high-risk due to the destination country's critical tier status."
+      ]
     },
     "customer_context": {}
   },
