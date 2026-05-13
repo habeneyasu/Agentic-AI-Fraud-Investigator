@@ -1,7 +1,22 @@
-# ── Environment ───────────────────────────────────────────────────────────────
+# ── Secrets & environment (never commit real credentials) ─────────────────────
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+*.secret
+.secrets/
+secrets/
+credentials.json
+*credentials*.json
+service-account*.json
+.aws/
+gcloud/
+.streamlit/secrets.toml
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
@@ -21,17 +36,14 @@ venv/
 env/
 ENV/
 
-# ── uv ────────────────────────────────────────────────────────────────────────
-uv.lock
-
-# ── Testing ───────────────────────────────────────────────────────────────────
+# ── Testing / coverage ────────────────────────────────────────────────────────
 .pytest_cache/
 .hypothesis/
 htmlcov/
 .coverage
 coverage.xml
 
-# ── IDE ───────────────────────────────────────────────────────────────────────
+# ── IDE / editor ──────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
@@ -41,20 +53,38 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-# ── Logs ──────────────────────────────────────────────────────────────────────
+# ── Logs & local run output ───────────────────────────────────────────────────
 *.log
 logs/
+tmp/
+temp/
+scratch/
+exports/
+downloads/
 
-# ── Docker ────────────────────────────────────────────────────────────────────
+# ── Local databases & dumps (may contain PII from dev) ────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+dump.sql
+*.dump
+
+# ── Docker overrides (often contain local paths / secrets) ───────────────────
 *.override.yml
 
-# ── Kiro (specs and IDE settings — local only) ────────────────────────────────
+# ── Tooling / specs (local only) ──────────────────────────────────────────────
 .kiro/
 
-# ── Docs (source of truth ODT, lock files) ────────────────────────────────────
+# ── Documentation: tracked vs local-only ─────────────────────────────────────
+# Tracked: README, API docs in repo root. Ignored below: drafts, internal notes,
+# generated trees, and paths that should not leave your machine.
 docs/
-
-# ── Internal demo/planning docs (not for public repo) ────────────────────────
+local-docs/
+private-docs/
+notes/
+*_LOCAL.md
+*_PRIVATE.md
+INTERNAL*.md
 DEMO_GUIDE.md
 README_DEMO.md
 SIMPLE_DEMO_FLOW.md

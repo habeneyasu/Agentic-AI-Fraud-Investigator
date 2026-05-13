@@ -1,238 +1,190 @@
 """
-Triage service for fraud case prioritization.
+Triage Service - Enterprise-grade orchestration layer.
 """
 
-from typing import Dict, Any, List
-from datetime import datetime
+from typing import List, Optional, Dict, Any
 
-from app.services.base import BaseService
-from app.shared.enums import CasePriority
+from app.models.alert import AlertFilter
+from app.models.triage import (
+    AlertPolicy,
+    TriageAssessmentRequest,
+    TriageAssessmentResponse,
+    AssessedAlert,
+    TriageSummary,
+)
+from app.repositories.alert_repository import AlertRepository
+from app.services.risk_scoring_engine import RiskScoringEngine
+from app.services.decision_engine import DecisionEngine
 
 
-class CaseTriageRulesService(BaseService):
-    """Deterministic rules engine for case prioritisation and routing hints."""
-    
+class TriageService:
+    """Enterprise-grade triage service orchestrating assessment workflow."""
+
     def __init__(self):
-        super().__init__()
-        self.risk_thresholds = {
-            "critical": 0.8,
-            "high": 0.6,
-            "medium": 0.4,
-            "low": 0.2
-        }
-        self.priority_weights = {
-            "amount": 0.3,
-            "risk_score": 0.4,
-            "customer_tier": 0.2,
-            "alert_count": 0.1
-        }
-        self.escalation_rules = {
-            "critical_risk": 0.8,
-            "high_amount": 50000,
-            "multiple_alerts": 3
-        }
-        self.auto_action_rules = {
-            "freeze_threshold": 0.9,
-            "block_threshold": 0.7,
-            "flag_threshold": 0.6
-        }
-    
-    def analyze_case(self, case_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze case using deterministic rules."""
-        self._log_operation("analyze_case", investigation_id=case_data.get("investigation_id"))
-        
-        try:
-            risk_score = case_data.get("risk_score", 0.0)
-            amount = case_data.get("amount", 0.0)
-            customer_tier = case_data.get("customer_tier", "standard")
-            alert_count = case_data.get("alert_count", 1)
-            
-            # Calculate priority score
-            priority_score = self._calculate_priority_score(risk_score, amount, customer_tier, alert_count)
-            
-            # Determine triage decision
-            triage_decision, priority = self._determine_triage_decision(priority_score)
-            
-            result = {
-                "investigation_id": case_data.get("investigation_id"),
-                "triage_decision": triage_decision,
-                "priority": priority,
-                "priority_score": priority_score,
-                "escalation_required": priority_score >= 0.6,
-                "auto_action": self._resolve_auto_action_for_scores(priority_score, risk_score),
-                "human_review_required": priority_score >= 0.4,
-                "reasoning": self._generate_reasoning(risk_score, amount, customer_tier, alert_count),
-                "confidence": min(priority_score + 0.2, 1.0),
-                "triage_timestamp": datetime.utcnow().isoformat()
-            }
-            
-            return self._generate_response(result)
-        except Exception as e:
-            self._log_error("analyze_case", e)
-            return self._generate_response({"error": str(e)}, success=False)
-    
-    def calculate_priority(
-        self,
-        risk_score: float,
-        amount: float,
-        customer_tier: str = "standard",
-        alert_count: int = 1
-    ) -> Dict[str, Any]:
-        """Calculate investigation priority."""
-        priority_score = self._calculate_priority_score(risk_score, amount, customer_tier, alert_count)
-        priority_level = self._determine_priority_level(priority_score)
-        
-        return self._generate_response({
-            "priority_score": priority_score,
-            "priority_level": priority_level,
-            "factors": {
-                "risk_score": risk_score,
-                "amount": amount,
-                "customer_tier": customer_tier,
-                "alert_count": alert_count
-            }
-        })
-    
-    def check_escalation(
-        self,
-        risk_score: float,
-        amount: float,
-        alert_types: List[str],
-        customer_history: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Check if case requires escalation."""
-        escalation_required = self._check_escalation_rules(risk_score, amount, alert_types)
-        escalation_reasons = self._get_escalation_reasons(risk_score, amount, alert_types)
-        escalation_level = self._determine_escalation_level(risk_score)
-        
-        return self._generate_response({
-            "escalation_required": escalation_required,
-            "escalation_reasons": escalation_reasons,
-            "recommended_escalation_level": escalation_level
-        })
-    
-    def determine_auto_action(
-        self,
-        risk_score: float,
-        triage_decision: str,
-        customer_risk_level: str = "low"
-    ) -> Dict[str, Any]:
-        """Determine automatic action."""
-        action_data = {"risk_score": risk_score, "triage_decision": triage_decision, "customer_risk_level": customer_risk_level}
-        priority_score = risk_score  # align with rule thresholds for this endpoint
-        auto_action = self._resolve_auto_action_for_scores(priority_score, risk_score)
-        action_confidence = self._calculate_action_confidence(action_data)
-        
-        return self._generate_response({
-            "auto_action": auto_action,
-            "confidence": action_confidence,
-            "requires_human_review": self._requires_human_review(action_data),
-            "action_parameters": self._get_action_parameters(action_data)
-        })
-    
-    def _calculate_priority_score(self, risk_score: float, amount: float, customer_tier: str, alert_count: int) -> float:
-        """Calculate priority score."""
-        return (
-            self.priority_weights["risk_score"] * risk_score +
-            self.priority_weights["amount"] * min(amount / 10000, 1.0) +
-            self.priority_weights["customer_tier"] * self._get_tier_weight(customer_tier) +
-            self.priority_weights["alert_count"] * min(alert_count / 5, 1.0)
+        self.repository = AlertRepository()
+        self.risk_scorer = RiskScoringEngine()
+        self.decision_engine = DecisionEngine()
+
+    async def assess(self, request: TriageAssessmentRequest) -> TriageAssessmentResponse:
+        """
+        Perform complete triage assessment workflow.
+
+        Args:
+            request: TriageAssessmentRequest with optional customer_id
+
+        Returns:
+            TriageAssessmentResponse with complete assessment results
+        """
+        # Get alerts from repository
+        alert_filter = AlertFilter(customer_id=request.customer_id)
+        alerts_response = await self.repository.get_alerts(alert_filter)
+        alerts = alerts_response.alerts
+
+        if not alerts:
+            return self._build_empty_response(request.customer_id)
+
+        # Process each alert through the pipeline
+        assessed_alerts = []
+        investigation_decisions = []
+
+        for alert in alerts:
+            # Step 1: Risk scoring
+            risk_score = self.risk_scorer.score(alert)
+
+            # Step 2: Decision making
+            decision = self.decision_engine.decide(risk_score)
+
+            # Step 3: Update alert status
+            alert.status = "CLOSED" if decision.action.value == "AUTO_CLOSE" else "OPEN_FOR_INVESTIGATION"
+            alert.metadata.update({
+                "triage_assessment": risk_score.dict(),
+                "investigation_decision": decision.dict()
+            })
+
+            # Step 4: Create assessed alert object
+            assessed_alert = AssessedAlert(
+                alert_id=alert.alert_id,
+                customer_id=alert.customer_id,
+                policy=AlertPolicy(alert.metadata.get("policy", "")),
+                risk_score=risk_score,
+                decision=decision,
+                investigation_required=decision.action.value == "ESCALATE_FOR_INVESTIGATION",
+                status=alert.status
+            )
+
+            assessed_alerts.append(assessed_alert)
+            investigation_decisions.append(decision.action.value)
+
+            # Update alert in repository
+            await self.repository.update_alert(alert.alert_id, alert.dict())
+
+        # Build comprehensive response
+        return self._build_response(assessed_alerts, investigation_decisions, request.customer_id)
+
+    def _build_empty_response(self, customer_id: Optional[str]) -> TriageAssessmentResponse:
+        """Build response for no alerts found."""
+        return TriageAssessmentResponse(
+            success=True,
+            total_alerts_assessed=0,
+            auto_closed_count=0,
+            investigation_required_count=0,
+            auto_close_rate=0.0,
+            escalation_rate=0.0,
+            average_risk_score=0.0,
+            assessed_alerts=[],
+            hint=(
+                "No alerts in the API process memory. The triage store is filled only by this service "
+                "(e.g. POST /v1/alerts/generate?customer_id=CUST003). JSON in Streamlit or on disk is not read here. "
+                "Call generate first, then POST /v1/triage/assess again."
+            ),
+            triage_summary=TriageSummary(
+                total_alerts_processed=0,
+                auto_closed_count=0,
+                escalated_count=0,
+                auto_close_rate=0.0,
+                escalation_rate=0.0,
+                average_risk_score=0.0,
+                customer_id=customer_id,
+                assessment_scope="customer_specific" if customer_id else "all_alerts",
+                policy_breakdown={},
+                severity_distribution={}
+            )
         )
-    
-    def _get_tier_weight(self, tier: str) -> float:
-        """Get weight based on customer tier."""
-        tier_weights = {"vip": 1.0, "premium": 0.8, "standard": 0.6, "basic": 0.4}
-        return tier_weights.get(tier.lower(), 0.6)
-    
-    def _determine_triage_decision(self, priority_score: float) -> tuple[str, CasePriority]:
-        """Determine triage decision and priority."""
-        if priority_score >= 0.8:
-            return "ESCALATE_IMMEDIATELY", CasePriority.CRITICAL
-        elif priority_score >= 0.6:
-            return "INVESTIGATE_HIGH_PRIORITY", CasePriority.HIGH
-        elif priority_score >= 0.4:
-            return "STANDARD_INVESTIGATION", CasePriority.MEDIUM
-        else:
-            return "MONITOR_ONLY", CasePriority.LOW
-    
-    def _resolve_auto_action_for_scores(self, priority_score: float, risk_score: float) -> str:
-        """Map scores to a coarse automated action label."""
-        if risk_score >= 0.9:
-            return "FREEZE_ACCOUNT"
-        elif risk_score >= 0.7:
-            return "BLOCK_TRANSACTION"
-        elif priority_score >= 0.6:
-            return "FLAG_FOR_REVIEW"
-        else:
-            return "MONITOR"
-    
-    def _generate_reasoning(self, risk_score: float, amount: float, tier: str, alert_count: int) -> str:
-        """Generate reasoning for triage decision."""
-        reasons = []
-        
-        if risk_score >= 0.8:
-            reasons.append(f"High risk score ({risk_score:.2f})")
-        if amount >= 10000:
-            reasons.append(f"High transaction amount (${amount:,.2f})")
-        if alert_count > 3:
-            reasons.append(f"Multiple alerts ({alert_count})")
-        if tier == "vip":
-            reasons.append("VIP customer protection")
-        
-        return "; ".join(reasons) if reasons else "Standard risk assessment"
-    
-    def _determine_priority_level(self, score: float) -> CasePriority:
-        """Determine priority level."""
-        if score >= 0.8:
-            return CasePriority.CRITICAL
-        elif score >= 0.6:
-            return CasePriority.HIGH
-        elif score >= 0.4:
-            return CasePriority.MEDIUM
-        else:
-            return CasePriority.LOW
-    
-    def _check_escalation_rules(self, risk_score: float, amount: float, alert_types: List[str]) -> bool:
-        """Check if escalation is required."""
-        return (risk_score >= self.escalation_rules["critical_risk"] or 
-                amount >= self.escalation_rules["high_amount"] or
-                len(alert_types) >= self.escalation_rules["multiple_alerts"])
-    
-    def _get_escalation_reasons(self, risk_score: float, amount: float, alert_types: List[str]) -> List[str]:
-        """Get escalation reasons."""
-        reasons = []
-        
-        if risk_score >= self.escalation_rules["critical_risk"]:
-            reasons.append("Critical risk score")
-        if amount >= self.escalation_rules["high_amount"]:
-            reasons.append("High value transaction")
-        if len(alert_types) >= self.escalation_rules["multiple_alerts"]:
-            reasons.append("Multiple alert types")
-        
-        return reasons
-    
-    def _determine_escalation_level(self, risk_score: float) -> str:
-        """Determine escalation level."""
-        if risk_score >= 0.9:
-            return "EXECUTIVE"
-        elif risk_score >= 0.7:
-            return "SENIOR_MANAGEMENT"
-        else:
-            return "TEAM_LEAD"
-    
-    def _calculate_action_confidence(self, action_data: Dict[str, Any]) -> float:
-        """Calculate action confidence."""
-        risk_score = action_data.get("risk_score", 0.0)
-        return min(risk_score + 0.1, 1.0)
-    
-    def _requires_human_review(self, action_data: Dict[str, Any]) -> bool:
-        """Check if human review is required."""
-        risk_score = action_data.get("risk_score", 0.0)
-        return risk_score >= 0.4
-    
-    def _get_action_parameters(self, action_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get action parameters."""
-        return {
-            "action_type": action_data.get("auto_action", "MONITOR"),
-            "urgency": "HIGH" if action_data.get("risk_score", 0.0) >= 0.6 else "NORMAL"
+
+    def _build_response(
+        self,
+        assessed_alerts: List[AssessedAlert],
+        investigation_decisions: List[str],
+        customer_id: Optional[str]
+    ) -> TriageAssessmentResponse:
+        """Build comprehensive triage assessment response."""
+        total_assessed = len(assessed_alerts)
+        auto_closed = len([d for d in investigation_decisions if d == "AUTO_CLOSE"])
+        escalated = len([d for d in investigation_decisions if d == "ESCALATE_FOR_INVESTIGATION"])
+
+        # Calculate statistics
+        average_risk = sum(alert.risk_score.score for alert in assessed_alerts) / total_assessed
+        auto_close_rate = (auto_closed / total_assessed) * 100 if total_assessed > 0 else 0
+        escalation_rate = (escalated / total_assessed) * 100 if total_assessed > 0 else 0
+
+        # Build breakdown statistics
+        policy_breakdown = self._build_policy_breakdown(assessed_alerts)
+        severity_distribution = self._build_severity_distribution(assessed_alerts)
+
+        return TriageAssessmentResponse(
+            success=True,
+            total_alerts_assessed=total_assessed,
+            auto_closed_count=auto_closed,
+            investigation_required_count=escalated,
+            auto_close_rate=round(auto_close_rate, 2),
+            escalation_rate=round(escalation_rate, 2),
+            average_risk_score=round(average_risk, 3),
+            assessed_alerts=assessed_alerts,
+            hint=None,
+            triage_summary=TriageSummary(
+                total_alerts_processed=total_assessed,
+                auto_closed_count=auto_closed,
+                escalated_count=escalated,
+                auto_close_rate=round(auto_close_rate, 2),
+                escalation_rate=round(escalation_rate, 2),
+                average_risk_score=round(average_risk, 3),
+                customer_id=customer_id,
+                assessment_scope="customer_specific" if customer_id else "all_alerts",
+                policy_breakdown=policy_breakdown,
+                severity_distribution=severity_distribution
+            )
+        )
+
+    def _build_policy_breakdown(self, assessed_alerts: List[AssessedAlert]) -> dict:
+        """Build policy type breakdown statistics."""
+        breakdown = {
+            "high_value_transactions": 0,
+            "new_device_logins": 0,
+            "sanctioned_countries": 0
         }
+
+        for alert in assessed_alerts:
+            if alert.policy == AlertPolicy.HIGH_VALUE_TRANSACTION:
+                breakdown["high_value_transactions"] += 1
+            elif alert.policy == AlertPolicy.NEW_DEVICE_LOGIN:
+                breakdown["new_device_logins"] += 1
+            elif alert.policy == AlertPolicy.SANCTIONED_COUNTRY:
+                breakdown["sanctioned_countries"] += 1
+
+        return breakdown
+
+    def _build_severity_distribution(self, assessed_alerts: List[AssessedAlert]) -> dict:
+        """Build severity distribution statistics."""
+        distribution = {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0
+        }
+
+        for alert in assessed_alerts:
+            severity = alert.risk_score.severity.value
+            if severity in distribution:
+                distribution[severity] += 1
+
+        return distribution

@@ -25,7 +25,17 @@ class Settings(BaseSettings):
     # Database
     database_url: str = Field(
         default="postgresql://postgres:password@localhost:5432/fraud_investigator",
-        env="DATABASE_URL"
+        env="DATABASE_URL",
+    )
+    skip_database_init: bool = Field(
+        default=False,
+        env="SKIP_DATABASE_INIT",
+        description="If true, do not connect to PostgreSQL or run create_all (JSON / in-memory paths only).",
+    )
+    require_database: bool = Field(
+        default=False,
+        env="REQUIRE_DATABASE",
+        description="If true, startup fails when PostgreSQL is unreachable. If false, log and run without ORM.",
     )
     
     # Redis
@@ -51,10 +61,10 @@ class Settings(BaseSettings):
     )
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
-    api_key: str = Field(
-        default="dev-secret-api-key",
+    api_key: Optional[str] = Field(
+        default=None,
         env="API_KEY",
-        description="Shared secret required in the X-API-Key header for protected routes.",
+        description="If set, protected routes require matching X-API-Key. If unset or empty, key checks are disabled (local demos only).",
     )
     
     # Fraud Detection Settings

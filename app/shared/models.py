@@ -666,3 +666,24 @@ class ActionResult:
     case_id: str
     timestamp: datetime
     details: Optional[Dict[str, Any]] = None
+
+
+# Evaluation Models
+class EvaluationRequest(BaseModel):
+    """Request for agent evaluation against benchmarks."""
+    investigation_id: str
+    agent_type: str
+    agent_result: Dict[str, Any]
+    fraud_type: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class EvaluationResponse(BaseModel):
+    """Response from agent evaluation."""
+    success: bool
+    evaluation_id: str
+    status: str  # EXCEEDS_BENCHMARK, MEETS_BENCHMARK, BELOW_BENCHMARK, CRITICAL_DEVIATION
+    evaluation_score: float
+    recommendations: List[str]
+    metrics: Dict[str, Any]
+    benchmark_data: Dict[str, Any]
