@@ -350,6 +350,8 @@ Consolidated sanctions and fraud-memory shapes are documented inline in OpenAPI.
 
 Deploy as a **single Docker Space** with **`app_port: 8501`**.
 
+**Important:** create the Space with the **Docker** SDK, not **Streamlit**. If you see Hugging Face’s default **“Welcome to Streamlit”** page (spiral demo, “Edit `/streamlit_app.py`”), the Space is not running this repo’s image — recreate it as Docker and link the correct branch (`main` recommended).
+
 1. [Create a Docker Space](https://huggingface.co/new-space) and connect this repository.
 2. In Space **Settings → Repository**, set the GitHub branch to **`main`** (recommended). Root `README.md` on **`main`** already starts with the required **YAML front matter** (`sdk: docker`, `app_port: 8501`, `startup_duration_timeout`). To tweak card text or timeouts, edit the top of this file or copy from [`deploy/SPACE_README_SNIPPET.md`](deploy/SPACE_README_SNIPPET.md).
 3. Optional: use branch **`hf-space`** instead if you prefer a dedicated deploy branch (kept in sync with `main`; same YAML + README body).
@@ -479,7 +481,9 @@ app/
 └── main.py                 # Application entrypoint
 
 dashboard/
-└── streamlit_app.py        # Guided demo UI
+└── streamlit_app.py        # Guided demo UI (canonical)
+
+streamlit_app.py            # Optional root entry → delegates to dashboard/ (HF / misconfigured runners)
 
 doc/
 └── Screenshots/            # UI PNGs (linked above)

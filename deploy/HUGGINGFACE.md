@@ -5,7 +5,7 @@ This repository is set up as a **single Docker app**: **Streamlit** is the publi
 ## 1. Create the Space
 
 1. Open [Create a new Space](https://huggingface.co/new-space).
-2. Choose **Docker** as the SDK (not Streamlit SDK — we need the combined image).
+2. Choose **Docker** as the SDK (**not** “Streamlit”). If you pick Streamlit, Hugging Face serves its stock **“Welcome to Streamlit”** spiral demo (`/streamlit_app.py`) instead of this project — delete the Space and recreate it as **Docker**, or duplicate the Space with Docker selected.
 3. Link your GitHub repository (or push this repo to a Hugging Face Space git remote).
 4. Hardware: **CPU basic** is enough for demos; first build can take several minutes.
 
@@ -56,6 +56,7 @@ After the Space build succeeds, open the Space URL. You should see the **Agentic
 
 ## 5. Troubleshooting
 
+- **“Welcome to Streamlit” + spiral sliders + “Edit /streamlit_app.py”:** the Space is using the **Streamlit** SDK template, not this repo’s **Docker** image. Recreate the Space (or switch SDK) so **Docker** is selected; confirm root `README.md` on the linked branch starts with YAML where `sdk: docker` and `app_port: 8501`.
 - **API-only image:** `docker build --target api .` produces FastAPI on `:8000` (same dependency layer as `oneapp`).
 - **Build fails on `pip install .`:** ensure `pyproject.toml`, `app/`, `dashboard/`, `.streamlit/`, and `scripts/` are present in the build context (root `Dockerfile` copies them explicitly).
 - **Space unhealthy / timeout:** raise `startup_duration_timeout` in the README YAML; first `pip install` is heavy on CPU-basic.
