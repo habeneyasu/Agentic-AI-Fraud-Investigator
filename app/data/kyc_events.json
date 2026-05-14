@@ -2,7 +2,7 @@
   {
     "customer_id": "CUST003",
     "event_type": "login_attempt",
-    "timestamp": "2025-01-10T02:30:00Z",
+    "timestamp": "2026-05-10T02:30:00Z",
     "ip_address": "185.220.101.182",
     "device_info": {
       "device_type": "desktop",
@@ -19,9 +19,9 @@
     "risk_score": 0.85
   },
   {
-    "customer_id": "CUST001", 
+    "customer_id": "CUST001",
     "event_type": "device_change",
-    "timestamp": "2025-01-09T18:45:00Z",
+    "timestamp": "2026-05-09T18:45:00Z",
     "ip_address": "192.168.1.100",
     "device_info": {
       "device_type": "mobile",
@@ -32,7 +32,7 @@
       "country": "US",
       "city": "New York",
       "latitude": 40.7128,
-      "longitude": -74.0060
+      "longitude": -74.006
     },
     "anomaly_type": "new_device",
     "risk_score": 0.65
@@ -40,7 +40,7 @@
   {
     "customer_id": "CUST002",
     "event_type": "multiple_failed_attempts",
-    "timestamp": "2025-01-08T14:20:00Z", 
+    "timestamp": "2026-05-08T14:20:00Z",
     "ip_address": "203.0.113.1",
     "device_info": {
       "device_type": "desktop",
@@ -59,7 +59,7 @@
   {
     "customer_id": "CUST003",
     "event_type": "suspicious_activity",
-    "timestamp": "2025-01-07T22:15:00Z",
+    "timestamp": "2026-05-11T22:15:00Z",
     "ip_address": "10.0.0.1",
     "device_info": {
       "device_type": "desktop",

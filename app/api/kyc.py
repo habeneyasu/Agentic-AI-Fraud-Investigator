@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List, Union
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 
+from app.api.bulk_json import bulk_rows
 from app.api.deps import RequireApiKey
 from app.api.response_models import DataStatusResponse
 from app.core.logging import get_logger
@@ -40,6 +41,39 @@ def _kyc_orm_from_payload(kyc_data: Dict[str, Any]) -> KycProfileORM:
     )
 
 
+def _insert_kyc_profiles(rows: List[Dict[str, Any]]) -> DataStatusResponse:
+    inserted = 0
+    skipped_ids: list[str] = []
+    staged_in_batch: set[str] = set()
+    with sync_session() as session:
+        for row in rows:
+            cid = row.get("customer_id")
+            if not cid:
+                raise HTTPException(status_code=400, detail="Each row must include customer_id")
+            if cid in staged_in_batch:
+                skipped_ids.append(cid)
+                continue
+            if session.query(KycProfileORM).filter(KycProfileORM.customer_id == cid).first():
+                skipped_ids.append(cid)
+                continue
+            session.add(_kyc_orm_from_payload(row))
+            staged_in_batch.add(cid)
+            inserted += 1
+        session.commit()
+    msg = f"Inserted {inserted} KYC profile(s)"
+    if skipped_ids:
+        msg += (
+            "; skipped customer_id(s) (already in DB or repeated later in this request): "
+            + ", ".join(skipped_ids)
+        )
+    return DataStatusResponse(
+        success=True,
+        count=inserted,
+        message=msg,
+        data=[{"skipped_customer_ids": skipped_ids}] if skipped_ids else None,
+    )
+
+
 @router.get("/kyc/list", response_model=DataStatusResponse)
 async def list_kyc_profiles(_: None = RequireApiKey):
     try:
@@ -64,15 +98,57 @@ async def list_kyc_profiles(_: None = RequireApiKey):
 
 
 @router.post("/kyc/create", response_model=DataStatusResponse)
-async def create_kyc_profile(kyc_data: Dict[str, Any], _: None = RequireApiKey):
+async def create_kyc_profile(
+    body: Union[Dict[str, Any], List[Dict[str, Any]]] = Body(...),
+    _: None = RequireApiKey,
+):
+    """One KYC object, a raw array, or ``{\"kyc_profiles\": [...]}``; one DB row per ``customer_id``."""
     try:
-        cid = kyc_data["customer_id"]
-        with sync_session() as session:
-            if session.query(KycProfileORM).filter(KycProfileORM.customer_id == cid).first():
-                return DataStatusResponse(success=False, count=0, message=f"KYC profile for {cid} already exists")
-            session.add(_kyc_orm_from_payload(kyc_data))
-            session.commit()
-        return DataStatusResponse(success=True, count=1, message=f"Created KYC profile for {cid}")
+        if isinstance(body, dict):
+            inner = body.get("kyc_profiles")
+            if isinstance(inner, list):
+                if not inner:
+                    raise HTTPException(
+                        status_code=422,
+                        detail='Key "kyc_profiles" must be a non-empty array.',
+                    )
+                rows = inner
+            else:
+                rows = [body]
+        elif isinstance(body, list):
+            if not body:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Provide a non-empty array of KYC objects, or use POST /v1/kyc/create-bulk "
+                    'with {"kyc_profiles": [...]}.',
+                )
+            if not all(isinstance(x, dict) for x in body):
+                raise HTTPException(status_code=422, detail="Array body must contain only objects.")
+            rows = body
+        else:
+            raise HTTPException(status_code=422, detail="Body must be a KYC object or an array of objects.")
+        return _insert_kyc_profiles(rows)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("create_kyc_profile failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/kyc/create-bulk", response_model=DataStatusResponse)
+async def create_kyc_profiles_bulk(
+    body: Union[List[Dict[str, Any]], Dict[str, Any]],
+    _: None = RequireApiKey,
+):
+    rows = bulk_rows(
+        body,
+        "kyc_profiles",
+        'Body must be a JSON array, or {"kyc_profiles": [...]}.',
+    )
+    try:
+        return _insert_kyc_profiles(rows)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("create_kyc_profiles_bulk failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e)) from e

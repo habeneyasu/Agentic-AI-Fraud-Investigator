@@ -54,7 +54,7 @@ async def assess_alerts(
     alert_id: Optional[str] = Query(default=None, description="Optional alert id filter."),
     _: None = RequireApiKey,
 ):
-    """Triage + optional narrative (scope: query ``customer_id`` / ``alert_id`` or body ``customer_id``)."""
+    """Triage with optional narrative; query ``customer_id`` / ``alert_id`` overrides body."""
     try:
         body = payload or TriageAssessBody()
         q_cust = _normalize_customer_id(customer_id)

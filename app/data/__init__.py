@@ -1,3 +1,1 @@
-"""
-Data layer for models and repositories.
-"""
+"""Data loaders and repositories."""

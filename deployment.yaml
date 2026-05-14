@@ -1,3 +1,6 @@
+# Example Kubernetes manifest for the **one-app** image (Streamlit :8501; FastAPI on loopback inside the pod).
+# Build/push: `docker build -f Dockerfile .` then tag and push to your registry.
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,62 +17,50 @@ spec:
         app: fraud-investigator
     spec:
       containers:
-      - name: fraud-investigator
-        image: 523476390411.dkr.ecr.us-east-1.amazonaws.com/agentic-ai-fraud-investigator:latest
-        ports:
-        - containerPort: 8000
-        - containerPort: 8501
-        env:
-        - name: DATABASE_URL
-          value: "postgresql://postgres:password@postgres:5432/fraud_investigator"
-        - name: REDIS_URL
-          value: "redis://redis:6379/0"
-        - name: ENVIRONMENT
-          value: "production"
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 5
+        - name: fraud-investigator
+          image: 523476390411.dkr.ecr.us-east-1.amazonaws.com/agentic-ai-fraud-investigator:latest
+          ports:
+            - containerPort: 8501
+          env:
+            - name: SKIP_DATABASE_INIT
+              value: "1"
+            - name: REQUIRE_DATABASE
+              value: "0"
+            - name: FRAUD_API_BASE
+              value: "http://127.0.0.1:8000"
+            - name: ENVIRONMENT
+              value: "production"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 40
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 15
+            periodSeconds: 10
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: fraud-investigator-api
+  name: fraud-investigator-ui
 spec:
   selector:
     app: fraud-investigator
   ports:
-  - port: 8000
-    targetPort: 8000
-  type: ClusterIP
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: fraud-investigator-dashboard
-spec:
-  selector:
-    app: fraud-investigator
-  ports:
-  - port: 8501
-    targetPort: 8501
+    - port: 8501
+      targetPort: 8501
   type: ClusterIP
 
 ---
@@ -82,19 +73,12 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
 spec:
   rules:
-  - http:
-      paths:
-      - path: /api
-        pathType: Prefix
-        backend:
-          service:
-            name: fraud-investigator-api
-            port:
-              number: 8000
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: fraud-investigator-dashboard
-            port:
-              number: 8501
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fraud-investigator-ui
+                port:
+                  number: 8501

@@ -1,1 +1,1 @@
-"""Repository pattern implementation."""
+"""Persistence repositories."""
