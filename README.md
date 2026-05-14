@@ -1,3 +1,19 @@
+---
+title: Agentic AI Fraud Investigator
+emoji: 🏛
+colorFrom: gray
+colorTo: blue
+sdk: docker
+app_port: 8501
+short_description: LangGraph + FastAPI fraud command center (Streamlit UI + API in one container)
+tags:
+  - streamlit
+  - fastapi
+  - fraud-detection
+  - langgraph
+startup_duration_timeout: 20m
+---
+
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+"></a>
   &nbsp;
@@ -334,9 +350,10 @@ Consolidated sanctions and fraud-memory shapes are documented inline in OpenAPI.
 
 Deploy as a **single Docker Space** with **`app_port: 8501`**.
 
-1. [Create a Docker Space](https://huggingface.co/new-space) and connect this repository.  
-2. Use the YAML card in [`deploy/SPACE_README_SNIPPET.md`](deploy/SPACE_README_SNIPPET.md) at the **top** of this README on the Space branch if required (`sdk: docker`, `app_port: 8501`).  
-3. Add secrets: `GEMINI_API_KEY` / `GOOGLE_API_KEY`, `CEREBRAS_API_KEY`, optional `API_KEY`.
+1. [Create a Docker Space](https://huggingface.co/new-space) and connect this repository.
+2. In Space **Settings → Repository**, set the GitHub branch to **`main`** (recommended). Root `README.md` on **`main`** already starts with the required **YAML front matter** (`sdk: docker`, `app_port: 8501`, `startup_duration_timeout`). To tweak card text or timeouts, edit the top of this file or copy from [`deploy/SPACE_README_SNIPPET.md`](deploy/SPACE_README_SNIPPET.md).
+3. Optional: use branch **`hf-space`** instead if you prefer a dedicated deploy branch (kept in sync with `main`; same YAML + README body).
+4. Add Space **Secrets**: `GEMINI_API_KEY` / `GOOGLE_API_KEY`, `CEREBRAS_API_KEY`, optional `API_KEY`.
 
 Full guide: [`deploy/HUGGINGFACE.md`](deploy/HUGGINGFACE.md).
 
@@ -468,7 +485,7 @@ doc/
 └── Screenshots/            # UI PNGs (linked above)
 
 tests/
-deploy/                     # Hugging Face snippet(no live secrets)
+deploy/                     # HF deploy guide, K8s/App Runner examples (no live secrets)
 docker-compose.yml          # default: one app (:8501); profile fullstack: API + Postgres + Redis
 pyproject.toml
 ```
