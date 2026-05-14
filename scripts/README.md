@@ -60,9 +60,9 @@ DEBUG=false
 
 ## Running Scripts
 
-1. **Install dependencies:**
+1. **Install dependencies** (from repository root; `pyproject.toml` is canonical):
    ```bash
-   pip install -r requirements.txt
+   uv pip install -e ".[test]"
    ```
 
 2. **Set up database:**

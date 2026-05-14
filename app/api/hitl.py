@@ -80,6 +80,16 @@ async def _build_investigation_review_payload(investigation_id: str) -> Dict[str
     }
 
 
+class ActionRequestPayload(BaseModel):
+    """JSON body item for ``execute-actions`` (mirrors ``ActionRequest``)."""
+
+    action_type: str
+    case_id: str
+    reason: str
+    target_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
 class AnalystReviewRequest(BaseModel):
     investigation_id: str
     analyst_id: str
@@ -260,14 +270,21 @@ async def submit_decision(
 @router.post("/{investigation_id}/execute-actions")
 async def execute_final_actions(
     investigation_id: str,
-    actions: List[ActionRequest],
+    actions: List[ActionRequestPayload],
     _: None = RequireApiKey,
     __: None = RequireAnalyst,
 ):
     action_engine = ActionEngine()
     executed_actions: List[ActionResult] = []
 
-    for action_request in actions:
+    for payload in actions:
+        action_request = ActionRequest(
+            action_type=payload.action_type,
+            case_id=payload.case_id,
+            reason=payload.reason,
+            target_id=payload.target_id,
+            metadata=payload.metadata,
+        )
         try:
             result = await action_engine.execute_action(action_request)
             executed_actions.append(result)
@@ -278,7 +295,7 @@ async def execute_final_actions(
                 ActionResult(
                     success=False,
                     message=f"Action failed: {str(e)}",
-                    action_id=f"failed_{action_request.action_type.value}",
+                    action_id=f"failed_{action_request.action_type}",
                     case_id=investigation_id,
                     timestamp=datetime.utcnow(),
                 )

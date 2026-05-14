@@ -1,3 +1,1 @@
-"""API package initialization."""
-
-from .alerts import router as alerts_router
+"""HTTP routers; ``app.main`` imports submodules and mounts ``APIRouter`` instances."""

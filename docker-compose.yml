@@ -1,18 +1,44 @@
+# Default: one app (Streamlit :8501 + internal FastAPI).
+#   docker compose up --build
+#
+# Optional Postgres + Redis + API-only container (no Streamlit):
+#   docker compose --profile fullstack up --build
+
 services:
-  # Main Application
   app:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
+      - "8501:8501"
+    environment:
+      SKIP_DATABASE_INIT: "1"
+      REQUIRE_DATABASE: "0"
+      FRAUD_API_BASE: "http://127.0.0.1:8000"
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      API_KEY: ${API_KEY:-}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
+    restart: unless-stopped
+
+  stack-api:
+    profiles: ["fullstack"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - SECRET_KEY=${SECRET_KEY}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://fraud_user:fraud_password@db:5432/fraud_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
       - db
       - redis
@@ -23,14 +49,13 @@ services:
     networks:
       - fraud-investigator
 
-  # PostgreSQL Database
   db:
+    profiles: ["fullstack"]
     image: postgres:15
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-fraud_db}
-      - POSTGRES_USER=${POSTGRES_USER:-fraud_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-fraud_password}
-    # Published on host 5433 to avoid conflict with local PostgreSQL.
+      POSTGRES_DB: ${POSTGRES_DB:-fraud_db}
+      POSTGRES_USER: ${POSTGRES_USER:-fraud_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fraud_password}
     ports:
       - "5433:5432"
     volumes:
@@ -40,8 +65,8 @@ services:
     networks:
       - fraud-investigator
 
-  # Redis for Caching
   redis:
+    profiles: ["fullstack"]
     image: redis:7-alpine
     ports:
       - "6380:6379"

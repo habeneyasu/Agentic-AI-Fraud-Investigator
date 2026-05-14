@@ -15,6 +15,7 @@ Reference implementation of an **agentic fraud investigation pipeline** for digi
 - [Repository layout](#repository-layout)
 - [API surface](#api-surface)
 - [Getting started](#getting-started)
+- [Hugging Face Spaces](#hugging-face-spaces)
 - [Dashboard](#dashboard)
 - [LLM usage](#llm-usage)
 - [Risk scoring](#risk-scoring)
@@ -132,7 +133,8 @@ dashboard/
 └── streamlit_app.py        # Guided demo UI
 
 tests/
-docker-compose.yml
+deploy/                     # Hugging Face Spaces README snippet + deploy guide
+docker-compose.yml          # default: one app (:8501); profile `fullstack`: API + Postgres + Redis
 pyproject.toml
 ```
 
@@ -143,18 +145,25 @@ pyproject.toml
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health` | Liveness / health |
-| `POST` | `/v1/alerts` | Ingest fraud alert (idempotent) |
-| `POST` | `/v1/investigate/triage` | LLM-assisted triage (Cerebras) |
-| `POST` | `/v1/investigate/full` | Full pipeline: agents + Gemini synthesis |
-| `POST` | `/v1/investigate/hitl-recommendation` | Analyst briefing (Gemini) |
+| `POST` | `/v1/alerts` | Ingest fraud alert (append to runtime queue) |
+| `POST` | `/v1/alerts/generate` | Policy engine: create alerts from transactions / KYC |
+| `POST` | `/v1/triage/assess` | Deterministic triage (+ optional narrative) |
+| `POST` | `/v1/investigation/customer-langgraph-deep` | LangGraph agents + synthesis + HITL payload |
+| `POST` | `/v1/investigation/hitl-recommendation` | Analyst briefing (LLM) |
 | `POST` | `/api/hitl/{id}/decision` | Submit analyst decision |
 | `GET` | `/audit/{id}` | Audit trail |
 | `POST` | `/v1/transactions/analyze` | Transaction agent |
 | `POST` | `/v1/kyc/analyze` | KYC / device agent |
 | `POST` | `/v1/sanctions/analyze` | Sanctions agent |
+| `GET` | `/v1/sanctions` | Sanctions reference (`resource=watchlist`, `country_risks`, or `all`) |
+| `POST` | `/v1/sanctions` | Append rows: canonical ``{"resource","items"}``, or legacy ``sanctions_data.json`` shape ``{"sanctions_entries":[...],"country_risks":[...]}`` (either or both keys) |
 | `POST` | `/v1/triage/alert` | Rule-based triage |
-| `GET` | `/v1/fraud-memory/stats` | Fraud memory statistics |
+| `GET` | `/v1/fraud-memory` | Patterns or stats (`view=patterns|stats`; patterns use `filter` + optional slice params) |
+| `POST` | `/v1/fraud-memory` | Mutations (`operation=add_pattern|cleanup|bump_frequency|delete`) |
+| `GET` | `/v1/fraud-memory/health` | Fraud memory liveness (no API key) |
 | `GET` | `/docs` | OpenAPI (Swagger UI) |
+
+**Note:** Older scattered sanctions routes (`/v1/sanctions/list`, `…/create`, `…/create-bulk`, country-risk mirrors) and fraud-memory routes (`/patterns`, `/patterns/entity/…`, `PUT …/frequency`, `POST /search`, etc.) are folded into the consolidated `GET`/`POST` pairs above.
 
 ---
 
@@ -203,11 +212,38 @@ uv run streamlit run dashboard/streamlit_app.py --server.port 8501
 - API documentation: `http://localhost:8000/docs`
 - Dashboard: `http://localhost:8501`
 
-### Docker
+### Docker (one app)
+
+The root **`Dockerfile`** defines two build targets (same dependency install from `pyproject.toml`):
+
+| Target | Use | Exposed |
+| --- | --- | --- |
+| `oneapp` (default) | `docker compose up`, Hugging Face | Streamlit **8501**; FastAPI on `127.0.0.1:8000` inside the container |
+| `api` | `docker compose --profile fullstack` | FastAPI **8000** only (with Postgres + Redis) |
+
+The default image runs **FastAPI and Streamlit in one container**: the API listens on `127.0.0.1:8000` inside the container, and the dashboard is exposed on **port 8501** (same layout as Hugging Face Docker Spaces).
 
 ```bash
-docker-compose up -d
+docker compose up --build
 ```
+
+Open **http://localhost:8501** for the command center. OpenAPI is still available from inside the network; to reach `/docs` from your host, use `docker compose exec app curl -s http://127.0.0.1:8000/docs | head`, or run the **API-only** stack below.
+
+Optional **Postgres + Redis + API-only** (no Streamlit; FastAPI on **:8000**):
+
+```bash
+docker compose --profile fullstack up -d
+```
+
+### Hugging Face Spaces
+
+Deploy as **one Docker Space** (same image as `docker compose up`): FastAPI + Streamlit in one container; the Space must expose **port 8501** to the internet.
+
+1. [Create a Docker Space](https://huggingface.co/new-space) and connect this repository.
+2. Put the YAML card from [`deploy/SPACE_README_SNIPPET.md`](deploy/SPACE_README_SNIPPET.md) at the **very top** of root `README.md` (see branch / editor options in the guide), with **`sdk: docker`** and **`app_port: 8501`**.
+3. In Space **Settings → Secrets**, add optional `GEMINI_API_KEY` / `GOOGLE_API_KEY`, `CEREBRAS_API_KEY`, and `API_KEY` if you use keyed routes.
+
+Full walkthrough: [`deploy/HUGGINGFACE.md`](deploy/HUGGINGFACE.md).
 
 ---
 
@@ -231,9 +267,7 @@ If provider APIs are unavailable, the implementation falls back to rule-based lo
 
 ## Risk scoring
 
-Combined score (conceptually):
-
-`final = (rule_based_score × 0.5) + (ai_context_score × 0.5)`
+Deep investigation responses expose two numbers: **pipeline risk** (`rule_based_score`, LangGraph aggregate) and **final risk** (`final_risk_score`, from the LLM synthesis JSON). The dashboard treats the latter as the case score; it reflects narrative reasoning over agent outputs, not an embedding “context quality” metric.
 
 | Score | Tier | Typical routing |
 | --- | --- | --- |
@@ -285,6 +319,17 @@ Treat this as a **reference** stack: harden networking, secrets management, and 
 uv run pytest
 uv run pytest --cov=app tests/
 ```
+
+**Demo JSON (`app/data/`)** is aligned with the Streamlit walkthrough and investigator console:
+
+| Step | Customer | Role |
+| --- | --- | --- |
+| **Midnight mule / HITL** | `CUST003` | Off-hours IR transfer (`TXN10001`) + high-value KP wire (`TXN10004`); KYC geo mismatch same night; fraud-memory hits. |
+| **Escalated corridor** | `CUST001` | RU destination + device-change KYC (`TXN10002`). |
+| **Velocity / medium** | `CUST002` | CN purchase + brute-force KYC story (`TXN10003`). |
+| **Auto-clear / low risk** | `CUST002` | Small US withdrawal `TXN10006`; `CUST001` US purchase `TXN10005` for benign baseline. |
+
+Timestamps are **May 2026** so triage recency logic treats them as current. `runtime_alerts.json` ships as **`[]`**; run **`POST /v1/alerts/generate`** (or the dashboard **View alerts** button) to materialise alerts from Postgres-backed transactions.
 
 ---
 
