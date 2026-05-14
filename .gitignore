@@ -49,6 +49,17 @@ coverage.xml
 *.swp
 *.swo
 
+# ── Linters / type checkers / notebooks ───────────────────────────────────────
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.dmypy.json
+dmypy.json
+.ipynb_checkpoints/
+
+# Note: tracked docs live under `doc/` (e.g. screenshots). The plural `docs/` below
+# is for local-only draft trees, not the same path.
+
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
