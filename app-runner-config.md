@@ -1,57 +1,36 @@
-# AWS App Runner Configuration Guide
+# AWS App Runner configuration
 
-## Image Configuration
-- **Image URI**: 523476390411.dkr.ecr.us-east-1.amazonaws.com/agentic-ai-fraud-investigator:apprunner
-- **Port**: 8080 (App Runner default)
-- **Runtime**: Python
+Use the **same container image** as Hugging Face / `docker compose` (root `Dockerfile`, default **oneapp** target). App Runner exposes a **single HTTP port**; Streamlit must listen on that port while FastAPI stays on loopback inside the container.
 
-## Environment Variables
-Add these environment variables in App Runner:
+## Image
 
-### Required Variables
-- **ENVIRONMENT**: production
-- **API_BASE_URL**: (Optional - for external API calls)
+- Build: `docker build -f Dockerfile .` (default stage = `oneapp`)
+- Push to ECR (or Container Registry of your choice) and reference that URI in App Runner.
 
-### Optional Variables (for external services)
-- **DATABASE_URL**: postgresql://user:pass@host:5432/db
-- **REDIS_URL**: redis://host:6379/0
-- **OPENAI_API_KEY**: Your OpenAI API key
-- **ANTHROPIC_API_KEY**: Your Anthropic API key
-- **CEREBRAS_API_KEY**: Your Cerebras API key
-- **SECRET_KEY**: Your JWT secret key
+## Port
 
-## Instance Configuration
-- **CPU**: 0.25 vCPU (minimum)
-- **Memory**: 0.5 GB (minimum)
-- **Auto-scaling**: Enable for production
+- **Container port / App Runner port:** **8080** (App Runner default) or **8501** if your service allows it.
+- Set **`STREAMLIT_SERVER_PORT=8080`** (or `8501`) so Streamlit binds to the port App Runner forwards. Do **not** change `FRAUD_API_BASE` from `http://127.0.0.1:8000` unless you split API and UI across services.
 
-## Health Check
-- **Path**: /_stcore/health (Streamlit health check)
-- **Protocol**: HTTP
-- **Interval**: 30 seconds
-- **Timeout**: 5 seconds
-- **Healthy threshold**: 1
-- **Unhealthy threshold**: 3
+## Environment variables
 
-## Security
-- **IAM Role**: Create a role with permissions to:
-  - Access ECR repositories
-  - Access CloudWatch logs
-  - Access Secrets Manager (if using secrets)
+| Variable | Example | Notes |
+| --- | --- | --- |
+| `ENVIRONMENT` | `production` | |
+| `STREAMLIT_SERVER_PORT` | `8080` | Match App Runner port |
+| `SKIP_DATABASE_INIT` | `1` | No Postgres in typical App Runner demo |
+| `FRAUD_API_BASE` | `http://127.0.0.1:8000` | Co-located API (default in image) |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | (secret) | Optional LLM |
+| `CEREBRAS_API_KEY` | (secret) | Optional LLM |
+| `API_KEY` | (secret) | Optional; if set, clients must send `X-API-Key` |
 
-## Networking
-- **VPC**: Default VPC or custom VPC
-- **Security Groups**: Allow outbound HTTP/HTTPS
+## Health check
 
-## Observability
-- **Logging**: Enable CloudWatch logs
-- **Metrics**: Enable App Runner metrics
+- **Path:** `/_stcore/health`
+- **Port:** same as Streamlit (e.g. 8080)
 
-## Deployment Steps
-1. Go to AWS App Runner console
-2. Click "Create service"
-3. Select "Container image"
-4. Enter the Image URI above
-5. Configure environment variables
-6. Set port to 8080
-7. Review and create
+## Steps
+
+1. App Runner console → Create service → Container image from ECR.
+2. Set port to **8080** (or align with `STREAMLIT_SERVER_PORT`).
+3. Add secrets/variables as above.
