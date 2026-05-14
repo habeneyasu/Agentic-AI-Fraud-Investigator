@@ -13,9 +13,11 @@ This repository is set up as a **single Docker app**: **Streamlit** is the publi
 
 Hugging Face reads the **YAML block at the very top** of the repository root `README.md` to pick the SDK, port, and timeouts. The default `docker build .` uses the **`oneapp`** stage (last stage in `Dockerfile`).
 
-**Option A — deploy branch (recommended for GitHub):** create a branch (e.g. `hf-space`), put the snippet from [`SPACE_README_SNIPPET.md`](./SPACE_README_SNIPPET.md) **first**, then your normal README body below the closing `---`.
+**Recommended — branch `main`:** root `README.md` on **`main`** already includes the YAML front matter (same fields as [`SPACE_README_SNIPPET.md`](./SPACE_README_SNIPPET.md)). In your Space **Settings → Repository**, point the Space at the **`main`** branch so Hugging Face picks up `sdk: docker` and `app_port: 8501` automatically.
 
-**Option B — edit on HF:** after the Space exists, use the Space file editor and paste the same snippet at the top of `README.md`, then rebuild.
+**Optional — branch `hf-space`:** an alternate branch kept aligned with `main`, useful if you ever want deploy-only edits without touching `main` first.
+
+**Option — edit on HF:** after the Space exists, you can paste the snippet from [`SPACE_README_SNIPPET.md`](./SPACE_README_SNIPPET.md) at the top of the Space’s `README.md` in the web editor, then rebuild.
 
 Critical fields:
 
