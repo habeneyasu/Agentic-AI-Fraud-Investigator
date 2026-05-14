@@ -365,9 +365,7 @@ Full guide: [`deploy/HUGGINGFACE.md`](deploy/HUGGINGFACE.md).
 
 The Streamlit app walks through **data → alerts → triage → agents → scoring → HITL → resolution → audit → metrics**, with **live polling**, **risk gauges**, and **progress** affordances for demos.
 
-PNG assets live under **`doc/Screenshots/`** (paths are **relative to the repository root**). They are committed so **GitHub** can render them on the branch you are viewing. If your IDE markdown preview does not show images, open the repo root as the workspace folder or view the file on GitHub.
-
-Placeholders are generated with `uv run python scripts/gen_screenshot_placeholders.py` — replace the PNG files with real captures when ready (keep the same filenames).
+Reference PNGs live in **`doc/Screenshots/`**:
 
 | File | Use |
 | --- | --- |
@@ -379,19 +377,22 @@ Placeholders are generated with `uv run python scripts/gen_screenshot_placeholde
 | `doc/Screenshots/Paralle-Agents-Result.png` | Parallel agents results |
 | `doc/Screenshots/Walk-thorugh-defalut-page.png` | Walkthrough default / command center |
 
-**Example renders** (HTML `img` so GitHub scales predictably):
+**Example renders:**
 
-<p align="center">
-  <img src="doc/Screenshots/Paralle-Agents-Result.png" alt="Parallel agents results" width="820" />
-</p>
+![Parallel agents result](doc/Screenshots/Paralle-Agents-Result.png)
 
-<p align="center">
-  <img src="doc/Screenshots/HITL-Final-Design.png" alt="HITL layout and analyst flow" width="820" />
-</p>
+![HITL final design](doc/Screenshots/HITL-Final-Design.png)
 
-**Default branch / forks:** If you need a hard URL (for example a mirror site), use  
-`https://raw.githubusercontent.com/habeneyasu/Agentic-AI-Fraud-Investigator/main/doc/Screenshots/<filename>.png`  
-after the assets exist on **`main`** (swap `main` for your branch name while testing a PR).
+![AI review HITL](doc/Screenshots/AI-review-HITL.png)
+
+### Checklist (if images do not appear)
+
+- **Paths:** Filenames are **case-sensitive** — run `ls -la doc/Screenshots/` and match the table exactly.
+- **Git:** PNGs must be **committed** (not ignored) — check with `git status` / `git ls-files doc/Screenshots/`.
+- **Local preview:** VS Code Markdown preview resolves images relative to the **repository root** (`README.md` and `doc/` at the same level).
+- **GitHub:** Markdown `![]()` embeds resolve for the **branch** you are viewing; the table alone does not render images.
+
+Placeholder slides can be regenerated with `uv run python scripts/gen_screenshot_placeholders.py` (replace files with real captures when ready).
 
 ---
 
