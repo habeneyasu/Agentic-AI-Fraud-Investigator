@@ -34,14 +34,16 @@ startup_duration_timeout: 20m
 
 ## 3. Secrets and variables (Space → Settings)
 
-Add **Secrets** (or **Variables**) so the API and dashboard can call LLMs and optional API key auth:
+Use **Secrets** (private) for anything sensitive. **Do not** put `CEREBRAS_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `API_KEY` under **Variables** — those are visible in the Space UI and in Hub metadata as “public”.
 
-| Name | Notes |
-| --- | --- |
-| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Investigation synthesis / narratives |
-| `CEREBRAS_API_KEY` | Fast triage / optional paths |
-| `ANTHROPIC_API_KEY` | If you wire Anthropic elsewhere |
-| `API_KEY` | If set on the server, Streamlit must send `X-API-Key` (set the same value here) |
+| Name | Where to add | Notes |
+| --- | --- | --- |
+| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | **Secrets** | Investigation synthesis / narratives |
+| `CEREBRAS_API_KEY` | **Secrets** | Fast triage / optional paths |
+| `ANTHROPIC_API_KEY` | **Secrets** | If you wire Anthropic elsewhere |
+| `API_KEY` | **Secrets** | If set on the server, Streamlit must send `X-API-Key` (same value here) |
+
+Reserve **Variables** only for non-sensitive flags (e.g. `ENVIRONMENT=production` if you add such wiring).
 
 The image already sets:
 
