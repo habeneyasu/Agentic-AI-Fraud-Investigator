@@ -3,6 +3,8 @@
 #
 # Optional Postgres + Redis + API-only container (no Streamlit):
 #   docker compose --profile fullstack up --build
+#
+# For fullstack, set POSTGRES_* and DATABASE_URL (and SECRET_KEY) in the environment or a .env file — no defaults are baked in.
 
 services:
   app:
@@ -21,7 +23,7 @@ services:
       CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       API_KEY: ${API_KEY:-}
-      SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
+      SECRET_KEY: ${SECRET_KEY}
     restart: unless-stopped
 
   stack-api:
@@ -33,11 +35,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://fraud_user:fraud_password@db:5432/fraud_db}
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
+      SECRET_KEY: ${SECRET_KEY}
       ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
       - db
@@ -53,9 +55,9 @@ services:
     profiles: ["fullstack"]
     image: postgres:15
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-fraud_db}
-      POSTGRES_USER: ${POSTGRES_USER:-fraud_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fraud_password}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5433:5432"
     volumes:
