@@ -1,10 +1,10 @@
 """Pydantic domain models and API contracts for fraud investigations."""
 
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from dataclasses import dataclass
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.shared.enums import (
     ActionRecommendation,
@@ -294,10 +294,61 @@ class SynthesisRequest(BaseModel):
     agent_results: Dict[str, AgentResult]
 
 
+class SanctionsWriteRequest(BaseModel):
+    """Append watchlist rows and/or country-risk rows.
+
+    **Canonical:** ``resource`` (``watchlist`` | ``country_risks``) + non-empty ``items``.
+
+    **Legacy (``sanctions_data.json``):** ``sanctions_entries`` and/or ``country_risks`` at the top level.
+    When both keys are present, watchlist and country tables are both updated in one call.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    resource: Optional[Literal["watchlist", "country_risks"]] = None
+    items: Optional[List[Dict[str, Any]]] = None
+    sanctions_entries: Optional[List[Dict[str, Any]]] = None
+    country_risks: Optional[List[Dict[str, Any]]] = None
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> "SanctionsWriteRequest":
+        has_se = self.sanctions_entries is not None
+        has_cr = self.country_risks is not None
+        if self.resource is not None:
+            if not self.items or len(self.items) < 1:
+                raise ValueError("When resource is set, items must be a non-empty list")
+            if has_se or has_cr:
+                raise ValueError("Do not mix resource/items with sanctions_entries/country_risks")
+            return self
+        if has_se or has_cr:
+            return self
+        raise ValueError(
+            "Provide resource+items, or at least one of sanctions_entries / country_risks (legacy import)"
+        )
+
+
 class PatternSearchRequest(BaseModel):
     """Pattern search request."""
     query: str
     search_field: str = "entity_id"
+
+
+class FraudMemoryMutationRequest(BaseModel):
+    """Single POST surface for fraud-memory mutations (add, bump, delete, cleanup)."""
+
+    operation: Literal["add_pattern", "cleanup", "bump_frequency", "delete"]
+    pattern: Optional[FraudPatternRequest] = None
+    memory_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_operation_payload(self) -> "FraudMemoryMutationRequest":
+        if self.operation == "add_pattern":
+            if self.pattern is None:
+                raise ValueError("add_pattern requires 'pattern'")
+        elif self.operation in ("bump_frequency", "delete"):
+            if not (self.memory_id and str(self.memory_id).strip()):
+                raise ValueError(f"{self.operation} requires non-empty memory_id")
+        return self
 
 
 class PatternSearchResponse(BaseModel):

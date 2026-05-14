@@ -1,3 +1,1 @@
-"""
-Shared components for the fraud investigation system.
-"""
+"""Shared models, enums, and small constants."""

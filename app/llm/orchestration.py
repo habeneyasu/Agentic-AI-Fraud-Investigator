@@ -16,6 +16,7 @@ from app.llm.prompts import (
     get_hitl_recommendation_prompt,
 )
 from app.core.logging import get_logger
+from app.shared.country_risk import HIGH_RISK_COUNTRIES
 
 logger = get_logger(__name__)
 
@@ -171,7 +172,6 @@ def _rule_based_fallback(tx: dict, kyc: dict, san: dict) -> dict[str, Any]:
 
 
 def _triage_fallback(alert: dict) -> dict[str, Any]:
-    HIGH_RISK = {"IR", "KP", "SY", "CU", "VE", "MM", "BY"}
     amount = alert.get("amount", 0)
     country = alert.get("destination_country", "")
 
@@ -179,12 +179,12 @@ def _triage_fallback(alert: dict) -> dict[str, Any]:
         return {"decision": "AUTO_CLOSE", "priority": "LOW", "risk_score": 0.1,
                 "confidence": 0.95, "reasoning": "Amount below threshold.", "key_flags": []}
 
-    if amount > 1000 and country in HIGH_RISK:
+    if amount > 1000 and country in HIGH_RISK_COUNTRIES:
         return {"decision": "ESCALATE_FOR_ANALYSIS", "priority": "CRITICAL", "risk_score": 0.9,
                 "confidence": 0.9, "reasoning": "High-value transfer to sanctioned country.",
                 "key_flags": ["high_value", "sanctioned_country"]}
 
-    score = 0.3 + (0.3 if amount > 1000 else 0) + (0.2 if country in HIGH_RISK else 0)
+    score = 0.3 + (0.3 if amount > 1000 else 0) + (0.2 if country in HIGH_RISK_COUNTRIES else 0)
     return {
         "decision": "ESCALATE_FOR_ANALYSIS" if score > 0.5 else "AUTO_CLOSE",
         "priority": "HIGH" if score > 0.7 else "MEDIUM" if score > 0.5 else "LOW",

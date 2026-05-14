@@ -189,3 +189,4 @@ class ActionType(str, Enum):
     REVERSE = "reverse"
     BLOCK = "block"
     SMS = "sms"
+    CASE_CLOSED = "close"

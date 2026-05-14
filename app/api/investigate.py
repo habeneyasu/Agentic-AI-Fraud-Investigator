@@ -1,5 +1,5 @@
 """Investigation API (``/v1``): ``customer-langgraph-deep``, ``hitl-recommendation``, ``health``.
-Successful LLM HITL briefing persists a row via ``/v1/fraud-memory`` (see ``persist_fraud_memory`` on the request body).
+Successful LLM HITL briefing persists a pattern via ``FraudMemoryService`` (same shape as ``POST /v1/fraud-memory`` with ``operation=add_pattern``; see ``persist_fraud_memory`` on the request body).
 Triage: ``POST /v1/triage/assess`` in ``app/api/triage.py``."""
 
 from __future__ import annotations
@@ -228,14 +228,18 @@ async def _run_langgraph_with_deep_synthesis(
         customer_context=customer_context,
     )
     graph_risk = float(final.risk_score or 0.0)
-    final_score = float(ai_synthesis.get("final_risk_score", graph_risk))
+    # Holistic score from synthesis JSON (LLM narrative + evidence fusion), not a separate "context quality" metric.
+    synthesis_risk = float(ai_synthesis.get("final_risk_score", graph_risk))
+    final_score = synthesis_risk
 
     risk_result = {
         "final_risk_score": final_score,
         "risk_tier": str(ai_synthesis.get("risk_tier") or "MEDIUM"),
         "confidence": float(ai_synthesis.get("confidence", 0.75)),
         "rule_based_score": graph_risk,
-        "ai_context_score": final_score,
+        # Deprecated name: historically duplicated final_risk_score; keep numeric = synthesis for older clients.
+        "ai_context_score": synthesis_risk,
+        "synthesis_risk": synthesis_risk,
         "executive_summary": ai_synthesis.get("executive_summary", ""),
         "evidence_chain": ai_synthesis.get("evidence_chain", []),
         "reasoning_steps": ai_synthesis.get("reasoning_steps", []),
