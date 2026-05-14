@@ -346,7 +346,7 @@ Full guide: [`deploy/HUGGINGFACE.md`](deploy/HUGGINGFACE.md).
 
 The Streamlit app walks through **data → alerts → triage → agents → scoring → HITL → resolution → audit → metrics**, with **live polling**, **risk gauges**, and **progress** affordances for demos.
 
-Reference PNGs live in **`doc/Screenshots/`**:
+PNG assets live in **`doc/Screenshots/`** and are **committed** so GitHub can render README images on the default branch. The files below are **placeholder slides** (replace them with real captures when you have them; keep the same filenames so links stay valid).
 
 | File | Use |
 | --- | --- |
@@ -358,7 +358,7 @@ Reference PNGs live in **`doc/Screenshots/`**:
 | `doc/Screenshots/Paralle-Agents-Result.png` | Parallel agents results |
 | `doc/Screenshots/Walk-thorugh-defalut-page.png` | Walkthrough default / command center |
 
-**Example renders** (existing assets only — no fake paths):
+**Example renders:**
 
 ![Parallel agents result](doc/Screenshots/Paralle-Agents-Result.png)
 
@@ -458,7 +458,7 @@ doc/
 └── Screenshots/            # UI PNGs (linked above)
 
 tests/
-deploy/                     # Hugging Face snippet + deploy guide
+deploy/                     # Hugging Face snippet, K8s/App Runner *examples* (no live secrets)
 docker-compose.yml          # default: one app (:8501); profile fullstack: API + Postgres + Redis
 pyproject.toml
 ```

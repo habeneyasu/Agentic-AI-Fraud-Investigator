@@ -31,17 +31,14 @@ docker push "${FULL_IMAGE_URI}"
 
 echo "✅ Successfully pushed image: ${FULL_IMAGE_URI}"
 
-echo "📝 Syncing deployment.yaml from repo template (edit image URI if needed)..."
-# deployment.yaml in repo is maintained as source of truth; only image line may differ per account.
-if [[ -f deployment.yaml ]]; then
-  echo "   (deployment.yaml already present — update image: if your ECR URI changed)"
-else
-  echo "   No deployment.yaml in cwd; copy from repository root before kubectl apply."
-fi
+echo "📝 Kubernetes template (no secrets in repo): deploy/kubernetes.example.yaml"
+echo "   Copy to a local deployment.yaml, set YOUR_* placeholders and secrets, then:"
+echo "   kubectl apply -f deployment.yaml"
 
 echo ""
 echo "🎉 Build and push completed!"
 echo ""
 echo "📋 Next steps:"
+echo "  cp deploy/kubernetes.example.yaml deployment.yaml  # then edit"
 echo "  kubectl apply -f deployment.yaml"
 echo "  kubectl get pods"

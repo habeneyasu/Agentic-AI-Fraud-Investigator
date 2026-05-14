@@ -99,3 +99,9 @@ INTERNAL*.md
 DEMO_GUIDE.md
 README_DEMO.md
 SIMPLE_DEMO_FLOW.md
+
+# ── Org-specific deploy / internal API dumps (do not commit real URIs or secrets) ──
+# Use `deploy/kubernetes.example.yaml` and `deploy/APP_RUNNER.example.md` instead.
+/deployment.yaml
+/app-runner-config.md
+/DEVELOPER_API_DOCUMENTATION.md
