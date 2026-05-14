@@ -2,6 +2,39 @@
 
 This repository is set up as a **single Docker app**: **Streamlit** is the public UI (port **8501**), and **FastAPI** runs on `127.0.0.1:8000` inside the same container (`FRAUD_API_BASE` is set accordingly in the image).
 
+## Deploy to `habeneyasu/maulti-agent-ai-fraud-investigator`
+
+**Space URL:** [https://huggingface.co/spaces/habeneyasu/maulti-agent-ai-fraud-investigator](https://huggingface.co/spaces/habeneyasu/maulti-agent-ai-fraud-investigator)
+
+### Path A — GitHub-linked Space (recommended)
+
+1. In the Space: **Settings** (gear) → **Repository** (or **Build** / **Linked repository**).
+2. Set **GitHub repository** to `habeneyasu/Agentic-AI-Fraud-Investigator`.
+3. Set **branch** to **`main`** (or `hf-space` if you prefer that branch).
+4. Ensure the Space type is **Docker** (not Streamlit).
+5. **Settings → Secrets:** `CEREBRAS_API_KEY`, `GEMINI_API_KEY` (and optionally `GOOGLE_API_KEY`, `API_KEY`) — use **Secrets**, not public Variables.
+6. Push any commit to the linked branch on GitHub (`git push origin main`). Hugging Face will **rebuild** the Space automatically (watch **Logs**).
+
+### Path B — Push this repo to the Space’s Git remote (no GitHub link)
+
+Use this only if the Space is **not** connected to GitHub and you maintain code only on HF.
+
+1. Install the CLI: `pip install huggingface_hub` then `huggingface-cli login` (use a **write** token with Spaces scope).
+2. From your clone of **this** repository:
+
+```bash
+git remote add hf https://huggingface.co/spaces/habeneyasu/maulti-agent-ai-fraud-investigator
+# if `hf` already exists: git remote set-url hf https://huggingface.co/spaces/habeneyasu/maulti-agent-ai-fraud-investigator
+
+git push hf main:main
+```
+
+Use the branch name your Space tracks (often `main`). If the push is rejected, open the Space **Files** tab and confirm you are allowed to push; you may need to pull first: `git pull hf main --rebase` then push again.
+
+3. After a successful push, open **Logs** and wait for the Docker build to finish, then open the **App** tab.
+
+---
+
 ## 1. Create the Space
 
 1. Open [Create a new Space](https://huggingface.co/new-space).
