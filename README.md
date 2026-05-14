@@ -346,7 +346,9 @@ Full guide: [`deploy/HUGGINGFACE.md`](deploy/HUGGINGFACE.md).
 
 The Streamlit app walks through **data → alerts → triage → agents → scoring → HITL → resolution → audit → metrics**, with **live polling**, **risk gauges**, and **progress** affordances for demos.
 
-PNG assets live in **`doc/Screenshots/`** and are **committed** so GitHub can render README images on the default branch. The files below are **placeholder slides** (replace them with real captures when you have them; keep the same filenames so links stay valid).
+PNG assets live under **`doc/Screenshots/`** (paths are **relative to the repository root**). They are committed so **GitHub** can render them on the branch you are viewing. If your IDE markdown preview does not show images, open the repo root as the workspace folder or view the file on GitHub.
+
+Placeholders are generated with `uv run python scripts/gen_screenshot_placeholders.py` — replace the PNG files with real captures when ready (keep the same filenames).
 
 | File | Use |
 | --- | --- |
@@ -358,11 +360,19 @@ PNG assets live in **`doc/Screenshots/`** and are **committed** so GitHub can re
 | `doc/Screenshots/Paralle-Agents-Result.png` | Parallel agents results |
 | `doc/Screenshots/Walk-thorugh-defalut-page.png` | Walkthrough default / command center |
 
-**Example renders:**
+**Example renders** (HTML `img` so GitHub scales predictably):
 
-![Parallel agents result](doc/Screenshots/Paralle-Agents-Result.png)
+<p align="center">
+  <img src="doc/Screenshots/Paralle-Agents-Result.png" alt="Parallel agents results" width="820" />
+</p>
 
-![HITL final design](doc/Screenshots/HITL-Final-Design.png)
+<p align="center">
+  <img src="doc/Screenshots/HITL-Final-Design.png" alt="HITL layout and analyst flow" width="820" />
+</p>
+
+**Default branch / forks:** If you need a hard URL (for example a mirror site), use  
+`https://raw.githubusercontent.com/habeneyasu/Agentic-AI-Fraud-Investigator/main/doc/Screenshots/<filename>.png`  
+after the assets exist on **`main`** (swap `main` for your branch name while testing a PR).
 
 ---
 
@@ -458,7 +468,7 @@ doc/
 └── Screenshots/            # UI PNGs (linked above)
 
 tests/
-deploy/                     # Hugging Face snippet, K8s/App Runner *examples* (no live secrets)
+deploy/                     # Hugging Face snippet(no live secrets)
 docker-compose.yml          # default: one app (:8501); profile fullstack: API + Postgres + Redis
 pyproject.toml
 ```
