@@ -1,17 +1,11 @@
 ---
 title: Agentic AI Fraud Investigator
-emoji: 🏛
-colorFrom: gray
-colorTo: blue
+emoji: 🏛️
+colorFrom: blue
+colorTo: gray
 sdk: docker
 app_port: 8501
-short_description: LangGraph + FastAPI fraud command center (Streamlit UI + API in one container)
-tags:
-  - streamlit
-  - fastapi
-  - fraud-detection
-  - langgraph
-startup_duration_timeout: 20m
+pinned: false
 ---
 
 <p align="center">
@@ -30,6 +24,18 @@ startup_duration_timeout: 20m
 
 <p align="center"><em>Agentic AI Fraud Investigator</em> — a reference stack for digital banking and payments: ingest signals, triage with policy, orchestrate specialist agents, score risk with hybrid AI, gate on humans when it matters, and close the loop with auditable resolution.</p>
 
+### Quick start
+
+| Goal | Action |
+| --- | --- |
+| Run locally | [Install](#install) → [Configure](#configuration) → [Run locally](#run-locally) |
+| Run in Docker | [`docker compose up --build`](#docker-compose) → open **http://localhost:8501** |
+| Understand the flow | [Six-phase workflow](#six-phase-core-workflow) · [architecture](#architecture) |
+| Try the UI | [Dashboard](#dashboard-and-screenshots) (sidebar = phases **1–6**; try **CUST003**) |
+| API / keys | [LLM usage](#llm-usage-three-phases) · [API snapshot](#api-snapshot) · [Security](#security) |
+
+Jump: [table of contents](#table-of-contents).
+
 ---
 
 ## Table of contents
@@ -38,17 +44,14 @@ startup_duration_timeout: 20m
 - [Six-phase core workflow](#six-phase-core-workflow)
 - [Alert reasons (deterministic triggers)](#alert-reasons-deterministic-triggers)
 - [Architecture](#architecture)
-- [Workflow summary](#workflow-summary)
 - [LLM usage (three phases)](#llm-usage-three-phases)
 - [Data model](#data-model)
 - [Technical highlights](#technical-highlights)
-- [Technology stack](#technology-stack)
 - [Getting started](#getting-started)
-- [Demo dashboard (steps 1–6)](#demo-dashboard-steps-16)
+- [Dashboard and screenshots](#dashboard-and-screenshots)
 - [Testing and resilience](#testing-and-resilience)
 - [API snapshot](#api-snapshot)
 - [Hugging Face Spaces](#hugging-face-spaces)
-- [Dashboard and screenshots](#dashboard-and-screenshots)
 - [Risk scoring and policy routing](#risk-scoring-and-policy-routing)
 - [Investigation lifecycle](#investigation-lifecycle)
 - [Security](#security)
@@ -66,20 +69,20 @@ startup_duration_timeout: 20m
 | **Control** | Schema-validated intake, idempotency, policy thresholds, and explicit HITL before irreversible actions. |
 | **Trust** | Investigation logs, audit trail, fraud memory, and explainable scoring so every decision can be tied to evidence. |
 
-Synthetic demo data and a Streamlit **command center** are included for bootcamp demos, stakeholder walkthroughs, and integration tests — not as a drop-in production deployment.
+Synthetic demo data and a Streamlit UI ship for demos and tests — not a production drop-in.
 
 ---
 
 ## Six-phase core workflow
 
-| Phase | Flow | Outcome |
+| Phase | Flow → outcome | Main touchpoints |
 | --- | --- | --- |
-| **1 · Ingestion** | Transaction + KYC + Sanctions → **Alert engine** | Normalized, validated alerts linked to customers and signals. |
-| **2 · Triage** | Alert queue → Severity assessment → Investigation decision | Auto-close low noise, P1/P2 prioritization, optional “initial suspicion” narrative. |
-| **3 · Investigation** | Multi-agent orchestration **(LangGraph)** → **Tool execution** → **Risk scoring** | Parallel Transaction, KYC/device, and Sanctions agents; unified case picture for scoring. |
-| **4 · Evaluation** | Agent results → **Benchmark comparison** | `POST /v1/evaluation/agent-result` compares runs to in-repo benchmark bands (risk, confidence, latency). |
-| **5 · Fraud memory** | Fraud result → **Record fraud memory** for **RAG / context** | Enriches downstream triage and investigation with confirmed-fraud patterns (TTL in service code). |
-| **6 · Resolution** | HITL review → Analyst decision → **Case closure** | Overrides, resolution actions, and compliance-oriented summaries on the audit path. |
+| **1 · Ingestion** | Tx + KYC + sanctions → alert engine → normalized alerts | `POST /v1/alerts`, `POST /v1/alerts/generate`, Pydantic models |
+| **2 · Triage** | Queue → severity → investigate or close | `TriageService`, `/v1/triage/*` → `triage_assessments` |
+| **3 · Investigation** | LangGraph + tools → parallel agents → risk object | LangGraph, `/v1/investigation/*`, `investigation_logs` |
+| **4 · Evaluation** | Agent output → benchmark bands | `POST /v1/evaluation/agent-result` |
+| **5 · Fraud memory** | Confirmed patterns → context for later cases | `/v1/fraud-memory`, TTL in [`fraud_memory_service.py`](app/services/fraud_memory_service.py) |
+| **6 · Resolution** | HITL → analyst decision → closure | HITL routes, [`ActionEngine`](app/services/action_engine.py), audit APIs |
 
 ---
 
@@ -154,78 +157,46 @@ flowchart LR
 
 ---
 
-## Workflow summary
-
-| Step | Primary components | Key artifacts |
-| --- | --- | --- |
-| Ingest | `POST /v1/alerts`, `POST /v1/alerts/generate`, Pydantic models | `alerts`, validated payloads |
-| Triage | `TriageService`, `/v1/triage/*` | `triage_assessments`, priority, investigation action |
-| Investigate | LangGraph workflow, `/v1/investigation/*`, agents | `investigation_logs`, agent JSON, risk object |
-| Evaluate | `/v1/evaluation/agent-result`, benchmark tables | Evaluation status, recommendations |
-| Remember | Fraud memory service, `/v1/fraud-memory` | Patterns, frequency bumps, expiry metadata |
-| Resolve | HITL routes, `ActionEngine`, audit APIs | `audit_trail`, executed actions, closure state |
-
----
-
 ## LLM usage (three phases)
 
-| Phase | When | Role | Providers (configure in `.env`) | Primary code / routes |
+| Phase | When | Role | `.env` providers | Code |
 | --- | --- | --- | --- | --- |
-| **1 · Triage narrative** | After deterministic rules flag or route the alert | **`TriageService.assess`** path: human-readable **initial suspicion** note from raw metadata (plus short observations). | **`CEREBRAS_API_KEY`** + `CEREBRAS_MODEL` (fast JSON); **`GEMINI_API_KEY`** + `GEMINI_MODEL` (fallback) | [`app/llm/orchestration.py`](app/llm/orchestration.py) (`draft_triage_initial_suspicion`); [`app/services/triage_service.py`](app/services/triage_service.py); `POST /v1/triage/assess` |
-| **2 · Investigation synthesis** | Post-escalation, once agents return | **Lead investigator**: synthesizes specialist outputs into a **case narrative** and structured risk JSON **before HITL**. | **`GEMINI_API_KEY`** (preferred deep JSON); **`CEREBRAS_API_KEY`** (fallback) | [`app/services/ai_reasoning_service.py`](app/services/ai_reasoning_service.py) (`InvestigationReasoningService`); [`app/llm/orchestration.py`](app/llm/orchestration.py); `POST /v1/investigation/customer-langgraph-deep` |
-| **3 · Resolution audit** | After human decision (and optional action execution) | **Compliance summary**: resolution narrative for **audit trail**, combining analyst disposition with AI findings. | Same as phase 2 **or** dedicated audit model keys when you add them | [`app/api/hitl.py`](app/api/hitl.py) (`resolution_summary`, timeline); extend with dedicated prompts as you harden for production |
+| **1 · Triage narrative** | After rules route the alert | Initial suspicion text from metadata | `CEREBRAS_*` (fast JSON), `GEMINI_*` (fallback) | [`orchestration.py`](app/llm/orchestration.py) `draft_triage_initial_suspicion`, [`triage_service.py`](app/services/triage_service.py), `POST /v1/triage/assess` |
+| **2 · Investigation synthesis** | After agents return | Case narrative + risk JSON before HITL | `GEMINI_*` (preferred), `CEREBRAS_*` (fallback) | [`ai_reasoning_service.py`](app/services/ai_reasoning_service.py), [`orchestration.py`](app/llm/orchestration.py), `POST /v1/investigation/customer-langgraph-deep` |
+| **3 · Resolution audit** | After analyst decision | Audit-oriented resolution summary | Same as 2 (or add dedicated audit keys later) | [`hitl.py`](app/api/hitl.py) |
 
-Unified HTTP routing: [`app/llm/client.py`](app/llm/client.py) (`call_fast_json` / `call_reasoning_json`). Optional **`ANTHROPIC_API_KEY`** in Docker Compose for future Claude-style wiring.
+HTTP helpers: [`app/llm/client.py`](app/llm/client.py) (`call_fast_json`, `call_reasoning_json`). Compose may define `ANTHROPIC_API_KEY` for future wiring.
 
 ---
 
 ## Data model
 
-| Table / artifact | Purpose |
+| Artifact | Role |
 | --- | --- |
-| **transactions** | Raw movement of funds for analytics and agent input. |
-| **kyc_profiles** | Identity and verification context (device/geo story in demos). |
-| **sanctions_watchlist** | Reference rows and corridor metadata for screening. |
-| **alerts** | The **trigger object** linking transaction, KYC, and sanctions context. |
-| **triage_assessments** | Current triage verdict, scores, and narrative hooks. |
-| **investigation_logs** | Step-by-step agent and orchestrator reasoning. |
-| **fraud_memory** | Longer-lived patterns learned from confirmed or high-confidence fraud. |
-| **audit_trail** | Human approvals, rejections, overrides, and resolution notes. |
+| **transactions** | Fund movements for analytics / agents |
+| **kyc_profiles** | Identity + device/geo (demo story) |
+| **sanctions_watchlist** | Screening reference + corridors |
+| **alerts** | Trigger linking tx, KYC, sanctions |
+| **triage_assessments** | Verdict, scores, narrative hooks |
+| **investigation_logs** | Agent + orchestrator steps |
+| **fraud_memory** | Confirmed-fraud patterns (TTL) |
+| **audit_trail** | Human decisions, overrides, notes |
 
-Exact persistence varies by mode (in-memory demo queues vs. Postgres under `fullstack`); the **mental model** above matches how the API and dashboard are structured.
+Persistence: in-memory demo queues vs Postgres when using the Compose **`fullstack`** profile.
 
 ---
 
 ## Technical highlights
 
-- **Idempotency** on alert intake plus **Pydantic v2 schema validation** so malformed or replayed requests fail fast and do not corrupt state.
-- **Deterministic triage before AI**: auto-close low-value noise, P1/P2 prioritization, then LLMs for narrative and edge cases.
-- **Hybrid risk scoring**: rule-based signals + LLM JSON (**0–100 style** scores and confidence in API payloads; internal engines may use **0–1** — see [Risk scoring and policy routing](#risk-scoring-and-policy-routing)).
-- **Policy-based routing**: confidence and risk bands drive auto-approve vs. HITL (tune in `decision_engine`, graph scoring, and config).
-- **Multi-agent orchestration (LangGraph)** with **parallel** evidence collection (Transaction, KYC/device, Sanctions) → aggregation → scoring.
-- **Human-in-the-loop (HITL)** with analyst override: confirm fraud vs. false positive, notes, role-guarded routes.
-- **Resolution actions** (demo [`ActionEngine`](app/services/action_engine.py)): freeze account, reverse transaction, block login, SMS notify, fraud-memory updates — swap in real coresystems adapters for production.
-- **Full audit trail and explainability**: every material decision linkable to evidence, timelines, and investigation payloads.
-- **Streamlit dashboard**: agent progress, risk gauges, **live polling** against the API for demo-grade UX.
-- **Fraud memory TTL** on stored patterns ([`app/services/fraud_memory_service.py`](app/services/fraud_memory_service.py); extend toward **365-day** governance horizons as needed).
-- **Stateful workflows** (LangGraph graph state; add `MemorySaver` / DB checkpointer when you graduate past demos).
-- **Concurrency / resilience**: `asyncio` throughout, HTTP retries (e.g. Cerebras 429 backoff), outbound timeouts; optional **`asyncio.Semaphore(50)`** at integration boundaries under high fan-out.
-- **Demo scenario — “The Midnight Mule”** 🌙: **$2,500** offshore transfer from a student profile → **P1** → composite risk **~92** → **HITL** → **confirm fraud** → resolution — target **under 4 minutes** on a warm laptop with keys configured.
+Distinctive behaviors not spelled out elsewhere:
 
----
+- **Idempotent alert intake** + **Pydantic v2** validation — bad or replayed requests fail before state changes.
+- **Hybrid scores** — rules + LLM JSON; API-facing **0–100** vs internal **0–1** is called out under [Risk scoring](#risk-scoring-and-policy-routing).
+- **Demo `ActionEngine`** — freeze / reverse / block / notify / fraud-memory hooks; replace with real core adapters for production.
+- **Async + resilience** — `asyncio`, LLM client retries (e.g. Cerebras 429), timeouts; optional high-fan-out **`Semaphore`** at integration edges.
+- **“Midnight Mule” demo** — **CUST003**, ~**$2,500** offshore, **P1**, risk **~92**, **HITL**, confirm fraud — **under 4 minutes** end-to-end with keys on a warm machine.
 
-## Technology stack
-
-| Layer | Technology |
-| --- | --- |
-| Language | Python 3.11+ |
-| API | FastAPI 0.111, Uvicorn, Pydantic v2 |
-| Orchestration | LangGraph 0.1.5 |
-| LLM access | Cerebras Cloud SDK, Google Generative AI (Gemini), httpx |
-| Data | SQLAlchemy 2 (async), asyncpg / psycopg2 (fullstack profile) |
-| Dashboard | Streamlit 1.35, Plotly |
-| Observability | structlog |
-| Tooling | uv (recommended), pytest |
+LangGraph state today is in-process; add a **DB checkpointer** when you outgrow demos.
 
 ---
 
@@ -236,6 +207,7 @@ Exact persistence varies by mode (in-memory demo queues vs. Postgres under `full
 - Python **3.11+**
 - [uv](https://docs.astral.sh/uv/) (recommended)
 - API keys: [Cerebras](https://console.cerebras.ai), [Google AI Studio](https://aistudio.google.com) (Gemini)
+- Exact library pins: [`pyproject.toml`](pyproject.toml) (badges above are the headline versions)
 
 ### Install
 
@@ -276,7 +248,7 @@ uv run streamlit run dashboard/streamlit_app.py --server.port 8501
 
 ### Docker Compose
 
-The root **`Dockerfile`** exposes Streamlit on **8501** and runs FastAPI on `127.0.0.1:8000` inside the default **one-app** image (same shape as Hugging Face Docker Spaces).
+The root **`Dockerfile`** serves Streamlit on **8501** and FastAPI on `127.0.0.1:8000` in the default image (same layout as Hugging Face Docker Spaces).
 
 ```bash
 docker compose up --build
@@ -288,24 +260,35 @@ Open **http://localhost:8501**. For Postgres + Redis + **API-only** on host **80
 docker compose --profile fullstack up -d
 ```
 
-Set `SECRET_KEY`, `DATABASE_URL`, and `POSTGRES_*` in your environment or `.env` — defaults are not baked into Compose for secrets.
+Set `SECRET_KEY`, `DATABASE_URL`, and `POSTGRES_*` in `.env` as needed.
 
 ---
 
-## Demo dashboard (steps 1–6)
+## Dashboard and screenshots
 
-Map the **Streamlit command center** to the six phases:
+Streamlit follows the [six-phase workflow](#six-phase-core-workflow): **Generate alerts** → triage (**CUST003** / Midnight Mule) → **parallel agents** → optional benchmarks via **`/docs`** → **HITL** through audit/metrics. Live polling and gauges are for demos, not production ops.
 
-| Step | Phase | What to do |
-| --- | --- | --- |
-| **1** | Ingestion | Load or confirm **data sources** (transactions, KYC, sanctions). Use **Generate alerts** / `POST /v1/alerts/generate` so the queue is populated. |
-| **2** | Triage | Open the **alert queue**, pick **CUST003** / Midnight Mule style rows, run **triage** and read severity + decision. |
-| **3** | Investigation | Launch **parallel agents**; watch progress and intermediate JSON. |
-| **4** | Evaluation | (Optional) Call **`POST /v1/evaluation/agent-result`** from `/docs` with agent payloads to see benchmark status. |
-| **5** | Fraud memory | Inspect **fraud memory** patterns and stats; see how confirmed fraud reinforces future risk. |
-| **6** | Resolution | Walk **HITL**: AI briefing, analyst override, **resolution actions**, then **audit trail** and metrics — close the case narrative. |
+More UI captures: `doc/Screenshots/*.png` (**case-sensitive** paths).
 
-The UI also exposes additional substeps (metrics, timelines); treat the table above as the **story arc** for judges and peers.
+**Examples:**
+
+![Parallel agents result](doc/Screenshots/Paralle-Agents-Result.png)
+
+![HITL final design](doc/Screenshots/HITL-Final-Design.png)
+
+![AI review HITL](doc/Screenshots/AI-review-HITL.png)
+
+<details>
+<summary><strong>Expand: if screenshots do not render</strong></summary>
+
+- **Paths:** Filenames are **case-sensitive** — match files under `doc/Screenshots/`.
+- **Git:** PNGs must be **committed** — `git status` / `git ls-files doc/Screenshots/`.
+- **Local preview:** VS Code resolves `![]()` relative to the repo root.
+- **GitHub:** Images render for the **branch** you are viewing.
+
+`uv run python scripts/gen_screenshot_placeholders.py` can regenerate placeholders.
+
+</details>
 
 ---
 
@@ -321,9 +304,9 @@ uv run pytest --cov=app tests/
 | **Idempotency** | Alert keys and investigation IDs designed for safe replays in demos; validate your own keys in production. |
 | **Retries / backoff** | LLM HTTP clients retry on rate limits where implemented. |
 | **Partial evidence** | Agents can complete with degraded confidence when a specialist times out — inspect synthesis JSON and dashboard messaging. |
-| **Schema validation** | Pydantic rejects malformed intake early, before triage or graph work runs. |
+| **Schema validation** | Pydantic rejects bad payloads before triage or the graph runs. |
 
-Demo JSON under `app/data/` uses **May 2026** timestamps so recency logic behaves correctly. `runtime_alerts.json` ships empty; materialize alerts via the API or the dashboard.
+`app/data/` demo JSON uses **May 2026** timestamps. `runtime_alerts.json` starts empty — generate alerts from the UI or API.
 
 ---
 
@@ -340,15 +323,16 @@ Demo JSON under `app/data/` uses **May 2026** timestamps so recency logic behave
 | `POST` | `/api/hitl/{id}/decision` | Analyst decision |
 | `GET` | `/audit/{id}` | Audit trail |
 | `GET` / `POST` | `/v1/fraud-memory` | Read patterns/stats or mutate store |
-| `GET` | `/docs` | Full OpenAPI |
-
-Consolidated sanctions and fraud-memory shapes are documented inline in OpenAPI. Older scattered route names are folded into the pairs above.
+| `GET` | `/docs` | OpenAPI (full surface; sanctions / fraud-memory shapes live there) |
 
 ---
 
 ## Hugging Face Spaces
 
-Deploy as a **single Docker Space** with **`app_port: 8501`**.
+Deploy as a **single Docker Space** with **`app_port: 8501`**. Full walkthrough: [`deploy/HUGGINGFACE.md`](deploy/HUGGINGFACE.md).
+
+<details>
+<summary><strong>Expand: Docker Space setup (checklist)</strong></summary>
 
 **Important:** create the Space with the **Docker** SDK, not **Streamlit**. If you see Hugging Face’s default **“Welcome to Streamlit”** page (spiral demo, “Edit `/streamlit_app.py`”), the Space is not running this repo’s image — recreate it as Docker and link the correct branch (`main` recommended).
 
@@ -357,84 +341,25 @@ Deploy as a **single Docker Space** with **`app_port: 8501`**.
 3. Optional: use branch **`hf-space`** instead if you prefer a dedicated deploy branch (kept in sync with `main`; same YAML + README body).
 4. Add Space **Secrets**: `GEMINI_API_KEY` / `GOOGLE_API_KEY`, `CEREBRAS_API_KEY`, optional `API_KEY`.
 
-Full guide: [`deploy/HUGGINGFACE.md`](deploy/HUGGINGFACE.md).
-
----
-
-## Dashboard and screenshots
-
-The Streamlit app walks through **data → alerts → triage → agents → scoring → HITL → resolution → audit → metrics**, with **live polling**, **risk gauges**, and **progress** affordances for demos.
-
-Reference PNGs live in **`doc/Screenshots/`**:
-
-| File | Use |
-| --- | --- |
-| `doc/Screenshots/AI-review-HITL.png` | AI review / HITL step |
-| `doc/Screenshots/Deafult-live-page-1.png` | Live investigator / default view (variant 1) |
-| `doc/Screenshots/Default-live-page-2.png` | Live investigator / default view (variant 2) |
-| `doc/Screenshots/Final_Fraud_memory_and_audit.png` | Fraud memory + audit / resolution |
-| `doc/Screenshots/HITL-Final-Design.png` | HITL layout and analyst flow |
-| `doc/Screenshots/Paralle-Agents-Result.png` | Parallel agents results |
-| `doc/Screenshots/Walk-thorugh-defalut-page.png` | Walkthrough default / command center |
-
-**Example renders:**
-
-![Parallel agents result](doc/Screenshots/Paralle-Agents-Result.png)
-
-![HITL final design](doc/Screenshots/HITL-Final-Design.png)
-
-![AI review HITL](doc/Screenshots/AI-review-HITL.png)
-
-### Checklist (if images do not appear)
-
-- **Paths:** Filenames are **case-sensitive** — run `ls -la doc/Screenshots/` and match the table exactly.
-- **Git:** PNGs must be **committed** (not ignored) — check with `git status` / `git ls-files doc/Screenshots/`.
-- **Local preview:** VS Code Markdown preview resolves images relative to the **repository root** (`README.md` and `doc/` at the same level).
-- **GitHub:** Markdown `![]()` embeds resolve for the **branch** you are viewing; the table alone does not render images.
-
-Placeholder slides can be regenerated with `uv run python scripts/gen_screenshot_placeholders.py` (replace files with real captures when ready).
+</details>
 
 ---
 
 ## Risk scoring and policy routing
 
-Deep investigation responses expose **pipeline risk** (rule-heavy / graph aggregate) and **final risk** (LLM synthesis). The dashboard emphasizes the **final** case score where present.
-
-**Exemplar policy gates (tune in code and config):**
+Investigation payloads can include **pipeline risk** (rules/graph) and **final risk** (LLM synthesis); the UI prefers **final** when present. Some services use **0–1** internally — keep mapping consistent to **0–100** in analyst-facing views.
 
 | Rule (illustrative) | Typical routing |
 | --- | --- |
-| `confidence < 0.6` | Route to **HITL** — model or aggregate uncertainty is too high to auto-act. |
-| `risk > 70` (on 0–100 scale) | **HITL** or hard escalation — material harm if wrong. |
-| `risk < 30` with adequate confidence | **Auto-approve** / auto-clear band for operational efficiency. |
+| `confidence < 0.6` | **HITL** — uncertainty too high to auto-act |
+| `risk > 70` (0–100) | **HITL** / escalation |
+| `risk < 30` with solid confidence | **Auto-approve** / auto-clear band |
 
-Internal services sometimes use **normalized 0–1** scores; map consistently when binding to analyst UI and external ticketing.
+Tune gates in `decision_engine`, graph scoring, and config.
 
 ---
 
 ## Investigation lifecycle
-
-**State flow (text):**
-
-```
-RECEIVED → TRIAGE → INVESTIGATING → SCORING → DECIDING
-                                                    │
-                              ┌─────────────────────┤
-                              ▼                     ▼
-                        AUTO_APPROVE          AWAITING_HUMAN
-                              │                     │
-                              └──────────┬──────────┘
-                                         ▼
-                               RESOLUTION_IN_PROGRESS
-                                         │
-                    ┌────────────────────┤
-                    ▼                    ▼
-         CLOSED_FRAUD_CONFIRMED   CLOSED_FALSE_POSITIVE
-
-Also: CLOSED_AUTO_CLEARED · CLOSED_LOW_RISK · PARTIAL_EVIDENCE · FAILED
-```
-
-**Same flow (Mermaid):**
 
 ```mermaid
 stateDiagram-v2
@@ -453,17 +378,17 @@ stateDiagram-v2
   CLOSED_FALSE_POSITIVE --> [*]
 ```
 
-> Other terminal states in code paths include **CLOSED_AUTO_CLEARED**, **CLOSED_LOW_RISK**, **PARTIAL_EVIDENCE**, and **FAILED**.
+> Also used in code: **CLOSED_AUTO_CLEARED**, **CLOSED_LOW_RISK**, **PARTIAL_EVIDENCE**, **FAILED**.
 
 ---
 
 ## Security
 
-- When `API_KEY` is set, business routes expect matching **`X-API-Key`** (see `app/api/deps.py`). If unset, key checks are skipped for local demos only.  
-- HITL and audit routes may expect **`X-User-Role`** (`Analyst` / `Auditor`) where enforced.  
-- Request bodies validated with **Pydantic v2**.
+- Optional **`API_KEY`** → clients send **`X-API-Key`** (`app/api/deps.py`). Omitted = local demo only.
+- Some HITL/audit routes use **`X-User-Role`** (`Analyst` / `Auditor`).
+- **Pydantic v2** on request bodies.
 
-Treat this repository as a **reference**: harden identity, network boundaries, and secrets before regulated production use.
+Reference implementation only — add identity, network controls, and secret handling before regulated production.
 
 ---
 
@@ -511,6 +436,6 @@ pyproject.toml
 
 ## License and acknowledgements
 
-**License:** MIT — see [`LICENSE`](LICENSE) in the repository root when published.
+**License:** MIT — [`LICENSE`](LICENSE).
 
-**Acknowledgements:** Built as a showcase-quality reference for **agentic fraud operations** — ideal for an **Andela AI Engineering Bootcamp** capstone narrative. Thanks to the teams behind **FastAPI**, **LangGraph**, **Streamlit**, **Cerebras**, and **Google Gemini** for the tools and APIs that make rapid iteration possible.
+Showcase reference for agentic fraud ops (e.g. capstone / bootcamp demos). Thanks to **FastAPI**, **LangGraph**, **Streamlit**, **Cerebras**, and **Google Gemini** communities.
