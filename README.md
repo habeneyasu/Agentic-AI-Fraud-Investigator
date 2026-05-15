@@ -1,13 +1,3 @@
----
-title: Agentic AI Fraud Investigator
-emoji: 🏛️
-colorFrom: blue
-colorTo: gray
-sdk: docker
-app_port: 8501
-pinned: false
----
-
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+"></a>
   &nbsp;
