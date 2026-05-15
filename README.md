@@ -14,6 +14,28 @@
 
 <p align="center"><em>Agentic AI Fraud Investigator</em> — a reference stack for digital banking and payments: ingest signals, triage with policy, orchestrate specialist agents, score risk with hybrid AI, gate on humans when it matters, and close the loop with auditable resolution.</p>
 
+## UI preview
+
+Committed captures from the Streamlit command center ([`doc/Screenshots/`](doc/Screenshots/)):
+
+![Parallel agents result](doc/Screenshots/Paralle-Agents-Result.png)
+
+![HITL final design](doc/Screenshots/HITL-Final-Design.png)
+
+![AI review HITL](doc/Screenshots/AI-review-HITL.png)
+
+<details>
+<summary><strong>Expand: if screenshots do not render</strong></summary>
+
+- **Paths:** Filenames are **case-sensitive** — match files under `doc/Screenshots/`.
+- **Git:** PNGs must be **committed** — `git status` / `git ls-files doc/Screenshots/`.
+- **Local preview:** VS Code resolves `![]()` relative to the repo root.
+- **GitHub:** Images render for the **branch** you are viewing.
+
+`uv run --with pillow python scripts/gen_screenshot_placeholders.py` regenerates **placeholder** slides for any missing files (replace with real UI captures when you can).
+
+</details>
+
 ### Quick start
 
 | Goal | Action |
@@ -21,7 +43,7 @@
 | Run locally | [Install](#install) → [Configure](#configuration) → [Run locally](#run-locally) |
 | Run in Docker | [`docker compose up --build`](#docker-compose) → open **http://localhost:8501** |
 | Understand the flow | [Six-phase workflow](#six-phase-core-workflow) · [architecture](#architecture) |
-| Try the UI | [Dashboard](#dashboard-and-screenshots) (sidebar = phases **1–6**; try **CUST003**) |
+| Try the UI | [UI preview](#ui-preview) · [Dashboard walkthrough](#dashboard-and-screenshots) |
 | API / keys | [LLM usage](#llm-usage-three-phases) · [API snapshot](#api-snapshot) · [Security](#security) |
 
 Jump: [table of contents](#table-of-contents).
@@ -30,6 +52,7 @@ Jump: [table of contents](#table-of-contents).
 
 ## Table of contents
 
+- [UI preview](#ui-preview)
 - [At a glance](#at-a-glance)
 - [Six-phase core workflow](#six-phase-core-workflow)
 - [Alert reasons (deterministic triggers)](#alert-reasons-deterministic-triggers)
@@ -258,27 +281,7 @@ Set `SECRET_KEY`, `DATABASE_URL`, and `POSTGRES_*` in `.env` as needed.
 
 Streamlit follows the [six-phase workflow](#six-phase-core-workflow): **Generate alerts** → triage (**CUST003** / Midnight Mule) → **parallel agents** → optional benchmarks via **`/docs`** → **HITL** through audit/metrics. Live polling and gauges are for demos, not production ops.
 
-More UI captures: `doc/Screenshots/*.png` (**case-sensitive** paths).
-
-**Examples:**
-
-![Parallel agents result](doc/Screenshots/Paralle-Agents-Result.png)
-
-![HITL final design](doc/Screenshots/HITL-Final-Design.png)
-
-![AI review HITL](doc/Screenshots/AI-review-HITL.png)
-
-<details>
-<summary><strong>Expand: if screenshots do not render</strong></summary>
-
-- **Paths:** Filenames are **case-sensitive** — match files under `doc/Screenshots/`.
-- **Git:** PNGs must be **committed** — `git status` / `git ls-files doc/Screenshots/`.
-- **Local preview:** VS Code resolves `![]()` relative to the repo root.
-- **GitHub:** Images render for the **branch** you are viewing.
-
-`uv run python scripts/gen_screenshot_placeholders.py` can regenerate placeholders.
-
-</details>
+See **[UI preview](#ui-preview)** at the top of this README for the three primary embeds. Other committed PNGs in the same folder: `Deafult-live-page-1.png`, `Default-live-page-2.png`, `Final_Fraud_memory_and_audit.png`, `Walk-thorugh-defalut-page.png`.
 
 ---
 
