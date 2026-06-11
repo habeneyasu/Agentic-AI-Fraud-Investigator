@@ -45,11 +45,80 @@ class HybridRiskScorer:
             return await self._hybrid_scoring(event)
     
     async def _rules_based_scoring(self, event: Dict[str, Any]) -> ScoringResult:
-        """Calculate risk score using rule-based approach."""
+        """Calculate risk score from agent output lists or flat event fields.
+
+        Fix 2: When the graph passes aggregated agent outputs
+        (transaction_anomalies, kyc_anomalies, sanctions_hits), extract signals
+        from those lists instead of looking for flat keys that are never present.
+        Falls back to flat-key lookup for direct single-event calls.
+        """
         score = 0.0
         factors = []
-        
-        # Transaction rules
+
+        # ── Agent-aggregated path (called from _node_risk) ────────────────────
+        tx_anomalies: List[Dict[str, Any]] = event.get("transaction_anomalies") or []
+        kyc_anomalies: List[Dict[str, Any]] = event.get("kyc_anomalies") or []
+        sanctions_hits: List[Dict[str, Any]] = event.get("sanctions_hits") or []
+
+        if tx_anomalies or kyc_anomalies or sanctions_hits:
+            # Transaction anomalies
+            for anomaly in tx_anomalies:
+                severity = str(anomaly.get("severity", "medium")).lower()
+                weight = {"high": 0.4, "medium": 0.2, "low": 0.1}.get(severity, 0.1)
+                score += weight
+                factors.append(RiskFactor(
+                    category=RiskCategory.TRANSACTION,
+                    factor=str(anomaly.get("type", "transaction_anomaly")),
+                    weight=weight,
+                    value=weight,
+                    description=str(anomaly.get("description", "Transaction anomaly detected")),
+                ))
+
+            # KYC anomalies
+            for anomaly in kyc_anomalies:
+                severity = str(anomaly.get("severity", "medium")).lower()
+                weight = {"critical": 0.5, "high": 0.3, "medium": 0.2, "low": 0.1}.get(severity, 0.1)
+                score += weight
+                factors.append(RiskFactor(
+                    category=RiskCategory.DEVICE,
+                    factor=str(anomaly.get("anomaly_type", "kyc_anomaly")),
+                    weight=weight,
+                    value=weight,
+                    description=str(anomaly.get("description", "KYC anomaly detected")),
+                ))
+
+            # Sanctions hits
+            for hit in sanctions_hits:
+                hit_score = float(hit.get("risk_score") or 0.0)
+                weight = min(hit_score, self.rules["sanctions"]["sanctioned"])
+                score += weight
+                factors.append(RiskFactor(
+                    category=RiskCategory.SANCTIONS,
+                    factor="sanctions_hit",
+                    weight=weight,
+                    value=hit_score,
+                    description=f"Sanctions hit: {hit.get('entity_name', 'unknown')} "
+                                f"({hit.get('country_code', '')})",
+                ))
+
+            final_score = min(score, 1.0)
+            return ScoringResult(
+                risk_score=final_score,
+                risk_level=self._get_risk_level(final_score),
+                confidence=0.85,
+                factors=factors,
+                explanation=(
+                    f"Agent-aggregated scoring: tx_anomalies={len(tx_anomalies)}, "
+                    f"kyc_anomalies={len(kyc_anomalies)}, sanctions_hits={len(sanctions_hits)} "
+                    f"→ {final_score:.3f}"
+                ),
+                scoring_mode=ScoringMode.RULES_ONLY,
+                timestamp=datetime.utcnow(),
+                rule_score=final_score,
+                ai_score=None,
+            )
+
+        # ── Flat single-event path (direct calls) ─────────────────────────────
         if event.get('amount', 0) > self.rules['transaction']['threshold']:
             score += self.rules['transaction']['weight']
             factors.append(RiskFactor(
@@ -59,8 +128,7 @@ class HybridRiskScorer:
                 value=event.get('amount', 0),
                 description=f"High transaction amount: ${event.get('amount', 0):,.2f}"
             ))
-        
-        # Device rules
+
         if event.get('new_device', False):
             score += self.rules['device']['new_device']
             factors.append(RiskFactor(
@@ -70,8 +138,7 @@ class HybridRiskScorer:
                 value=1.0,
                 description="New device detected"
             ))
-        
-        # Geographic rules
+
         if event.get('high_risk_country', False):
             score += self.rules['geo']['high_risk_country']
             factors.append(RiskFactor(
@@ -81,8 +148,7 @@ class HybridRiskScorer:
                 value=1.0,
                 description="High-risk country detected"
             ))
-        
-        # Sanctions rules
+
         if event.get('sanctioned_entity', False):
             score += self.rules['sanctions']['sanctioned']
             factors.append(RiskFactor(
@@ -92,8 +158,7 @@ class HybridRiskScorer:
                 value=1.0,
                 description="Sanctioned entity detected"
             ))
-        
-        # Behavior rules
+
         failed_attempts = event.get('failed_attempts', 0)
         if failed_attempts > 3:
             behavior_score = self.rules['behavior']['failed_login'] * min(failed_attempts / 3, 2)
@@ -105,7 +170,7 @@ class HybridRiskScorer:
                 value=failed_attempts,
                 description=f"Multiple failed attempts: {failed_attempts}"
             ))
-        
+
         final_score = min(score, 1.0)
         return ScoringResult(
             risk_score=final_score,

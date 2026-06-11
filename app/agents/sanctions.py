@@ -189,6 +189,9 @@ class SanctionsAgent:
     
     def __init__(self):
         self.country_analyzer = CountryRiskAnalyzer()
+        # Fix 3: expose sanctions_db directly so _analyze_keywords can reach watchlist_keywords
+        # without going through country_analyzer (which owns the db instance).
+        self.sanctions_db = self.country_analyzer.sanctions_db
         
     async def analyze_sanctions_risk(self, entity: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze sanctions risk for entity."""
