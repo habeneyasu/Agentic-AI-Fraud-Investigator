@@ -1,7 +1,15 @@
-"""LangGraph workflow — sequential fraud pipeline with conditional routing (LangGraph 0.1.x)."""
+"""LangGraph workflow — parallel fraud pipeline with conditional routing (LangGraph 0.1.x).
+
+Fix 1: Transaction, KYC, and Sanctions agents now run in parallel via asyncio.gather
+        inside a single combined node (_node_agents_parallel), replacing the three
+        sequential edges START→TX→KYC→SANCTIONS.
+Fix 4: Investigation and Escalation nodes now perform meaningful work — recording
+        assigned investigator, pending actions, escalation metadata, and status updates.
+"""
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -30,19 +38,10 @@ def _unwrap_service_response(resp: Any) -> dict:
     return resp
 
 
-async def _node_start(state: dict) -> dict:
-    """Carry full dict between LangGraph 0.1.x nodes."""
-    s = dict(state)
-    cid = s.get("case_id") or s.get("correlation_id") or "unknown"
-    logger.info("graph_node", node="start", case_id=cid)
-    s["graph_started_at"] = datetime.now(timezone.utc).isoformat()
-    return s
-
-
-async def _node_transaction(state: dict) -> dict:
-    s = dict(state)
-    txs = s.get("transaction_data") or []
-    hist = s.get("customer_history") or {}
+async def _run_transaction_agent(state: dict) -> list:
+    """Run transaction agent; returns anomalies list."""
+    txs = state.get("transaction_data") or []
+    hist = state.get("customer_history") or {}
     cust_tx = hist.get("transactions") if isinstance(hist, dict) else []
     if not isinstance(cust_tx, list):
         cust_tx = []
@@ -51,32 +50,59 @@ async def _node_transaction(state: dict) -> dict:
         r = await _tx.analyze_transaction(t, cust_tx)
         body = _unwrap_service_response(r)
         anomalies.extend(body.get("anomalies") or [])
-    s["anomalies"] = anomalies
-    return s
+    logger.info("agent_complete", agent="transaction", anomaly_count=len(anomalies))
+    return anomalies
 
 
-async def _node_kyc(state: dict) -> dict:
-    s = dict(state)
-    events = s.get("kyc_data") or []
+async def _run_kyc_agent(state: dict) -> list:
+    """Run KYC/device agent; returns kyc_anomalies list."""
+    events = state.get("kyc_data") or []
     kyc_an: list = []
     for ev in events:
         r = await _kyc.analyze_kyc_event(ev)
         body = _unwrap_service_response(r)
         kyc_an.extend(body.get("anomalies") or [])
-    s["kyc_anomalies"] = kyc_an
-    return s
+    logger.info("agent_complete", agent="kyc", anomaly_count=len(kyc_an))
+    return kyc_an
 
 
-async def _node_sanctions(state: dict) -> dict:
-    s = dict(state)
-    entities = s.get("entities") or []
+async def _run_sanctions_agent(state: dict) -> list:
+    """Run sanctions agent; returns sanctions_hits list (risk_score > 0.5 only)."""
+    entities = state.get("entities") or []
     hits: list = []
     for ent in entities:
         r = await _san.analyze_sanctions_risk(ent)
         body = _unwrap_service_response(r)
         if float(body.get("risk_score") or 0) > 0.5:
             hits.append(body)
-    s["sanctions_hits"] = hits
+    logger.info("agent_complete", agent="sanctions", hit_count=len(hits))
+    return hits
+
+
+async def _node_start(state: dict) -> dict:
+    s = dict(state)
+    cid = s.get("case_id") or s.get("correlation_id") or "unknown"
+    logger.info("graph_node", node="start", case_id=cid)
+    s["graph_started_at"] = datetime.now(timezone.utc).isoformat()
+    return s
+
+
+# Fix 1: single node that fans out to all three agents concurrently then merges results.
+async def _node_agents_parallel(state: dict) -> dict:
+    """Run Transaction, KYC, and Sanctions agents in parallel; merge into state."""
+    s = dict(state)
+    logger.info("graph_node", node="agents_parallel", case_id=s.get("case_id", "unknown"))
+
+    anomalies, kyc_anomalies, sanctions_hits = await asyncio.gather(
+        _run_transaction_agent(s),
+        _run_kyc_agent(s),
+        _run_sanctions_agent(s),
+    )
+
+    s["anomalies"] = anomalies
+    s["kyc_anomalies"] = kyc_anomalies
+    s["sanctions_hits"] = sanctions_hits
+    s["agents_completed_at"] = datetime.now(timezone.utc).isoformat()
     return s
 
 
@@ -92,6 +118,12 @@ async def _node_risk(state: dict) -> dict:
     s["risk_score"] = float(res.risk_score or 0.0)
     s["risk_level"] = res.risk_level
     s["confidence"] = float(res.confidence or 0.0)
+    logger.info(
+        "graph_node",
+        node="risk_scoring",
+        risk_score=s["risk_score"],
+        risk_level=s["risk_level"],
+    )
     return s
 
 
@@ -105,29 +137,118 @@ async def _node_decision(state: dict) -> dict:
     else:
         dec = "MONITOR"
     s["workflow_decision"] = dec
+    logger.info("graph_node", node="decision", decision=dec, risk_score=rs)
     return s
 
 
+# Fix 4a: Investigation node — records assignment and pending actions instead of a no-op.
 async def _node_investigation(state: dict) -> dict:
     s = dict(state)
+    case_id = s.get("case_id", "unknown")
+    risk_score = float(s.get("risk_score") or 0.0)
+
     s["investigation_branch"] = True
     s["investigator_id"] = "graph_runner"
+    s["investigation_started_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Determine pending actions based on what the agents surfaced.
+    pending: list[str] = []
+    if s.get("sanctions_hits"):
+        pending.append("compliance_review_required")
+    if s.get("kyc_anomalies"):
+        pending.append("enhanced_kyc_verification")
+    if s.get("anomalies"):
+        pending.append("transaction_pattern_review")
+    if risk_score >= 0.7:
+        pending.append("senior_analyst_assignment")
+
+    s["pending_actions"] = pending
+    s["risk_factors"] = (
+        [a.get("type", "unknown") for a in (s.get("anomalies") or [])]
+        + [a.get("anomaly_type", "unknown") for a in (s.get("kyc_anomalies") or [])]
+        + ["sanctions_hit" for _ in (s.get("sanctions_hits") or [])]
+    )
+
+    logger.info(
+        "graph_node",
+        node="investigation",
+        case_id=case_id,
+        pending_actions=pending,
+    )
     return s
 
 
+# Fix 4b: Escalation node — records escalation reason, target queue, and urgency metadata.
 async def _node_escalation(state: dict) -> dict:
     s = dict(state)
+    case_id = s.get("case_id", "unknown")
+    risk_score = float(s.get("risk_score") or 0.0)
+
     s["escalated"] = True
-    s["escalation_reason"] = "graph_risk_threshold"
-    s["escalated_to"] = "senior_queue"
+    s["escalated_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Derive the most specific escalation reason from agent outputs.
+    if s.get("sanctions_hits"):
+        reason = "sanctions_hit_critical_threshold"
+        target = "compliance_and_legal_queue"
+    elif risk_score >= 0.9:
+        reason = "critical_risk_score"
+        target = "senior_fraud_analyst_queue"
+    else:
+        reason = "high_risk_score_threshold"
+        target = "fraud_investigation_queue"
+
+    s["escalation_reason"] = reason
+    s["escalated_to"] = target
+    s["escalation_metadata"] = {
+        "risk_score": risk_score,
+        "sanctions_hits": len(s.get("sanctions_hits") or []),
+        "transaction_anomalies": len(s.get("anomalies") or []),
+        "kyc_anomalies": len(s.get("kyc_anomalies") or []),
+        "escalated_by": "langgraph_workflow",
+        "requires_human_review": True,
+    }
+
+    logger.info(
+        "graph_node",
+        node="escalation",
+        case_id=case_id,
+        reason=reason,
+        target=target,
+    )
     return s
 
 
 async def _node_resolution(state: dict) -> dict:
     s = dict(state)
+    risk_score = float(s.get("risk_score") or 0.0)
+
     s["resolved"] = True
-    s["resolution_notes"] = "LangGraph pipeline completed"
     s["closed_at"] = datetime.now(timezone.utc).isoformat()
+
+    if s.get("escalated"):
+        s["resolution_notes"] = (
+            f"Case escalated to {s.get('escalated_to')} — "
+            f"risk {risk_score:.2f}, reason: {s.get('escalation_reason')}. "
+            "Awaiting human review."
+        )
+    elif s.get("investigation_branch"):
+        s["resolution_notes"] = (
+            f"Investigation completed — risk {risk_score:.2f}. "
+            f"Pending actions: {', '.join(s.get('pending_actions') or []) or 'none'}."
+        )
+    else:
+        s["resolution_notes"] = (
+            f"Case auto-resolved — risk {risk_score:.2f}, "
+            f"level {s.get('risk_level', 'UNKNOWN')}. No escalation required."
+        )
+
+    logger.info(
+        "graph_node",
+        node="resolution",
+        resolved=True,
+        escalated=s.get("escalated", False),
+    )
     return s
 
 
@@ -147,22 +268,19 @@ def _route_after_investigation(state: dict) -> str:
     )
 
 
+# Fix 1 (continued): graph wiring — START → AGENTS_PARALLEL replaces three sequential edges.
 def _compile_fraud_graph():
     g: StateGraph = StateGraph(dict)
     g.add_node(NodeType.START.value, _node_start)
-    g.add_node(NodeType.TRANSACTION_ANALYSIS.value, _node_transaction)
-    g.add_node(NodeType.KYC_ANALYSIS.value, _node_kyc)
-    g.add_node(NodeType.SANCTIONS_CHECK.value, _node_sanctions)
+    g.add_node("agents_parallel", _node_agents_parallel)
     g.add_node(NodeType.RISK_SCORING.value, _node_risk)
     g.add_node(NodeType.DECISION.value, _node_decision)
     g.add_node(NodeType.INVESTIGATION.value, _node_investigation)
     g.add_node(NodeType.ESCALATION.value, _node_escalation)
     g.add_node(NodeType.RESOLUTION.value, _node_resolution)
 
-    g.add_edge(NodeType.START.value, NodeType.TRANSACTION_ANALYSIS.value)
-    g.add_edge(NodeType.TRANSACTION_ANALYSIS.value, NodeType.KYC_ANALYSIS.value)
-    g.add_edge(NodeType.KYC_ANALYSIS.value, NodeType.SANCTIONS_CHECK.value)
-    g.add_edge(NodeType.SANCTIONS_CHECK.value, NodeType.RISK_SCORING.value)
+    g.add_edge(NodeType.START.value, "agents_parallel")
+    g.add_edge("agents_parallel", NodeType.RISK_SCORING.value)
     g.add_edge(NodeType.RISK_SCORING.value, NodeType.DECISION.value)
 
     g.add_conditional_edges(
